@@ -17,18 +17,12 @@ from .athletes import local_date
 from .config import Settings
 from .fit_parser import Activity, FitProblem, parse_fit
 from .models import AuthSession, User, now
-from .security import audit
+from .security import RequestActor, audit
 from .workout_metrics import PARAMETERS, VERSION, calculate
 from .workout_models import WorkoutFile, WorkoutImport, WorkoutMetrics, WorkoutSampleBlock, WorkoutSource
 
 BLOCK_SIZE = 512
 
-
-@dataclass(frozen=True)
-class RequestActor:
-    user_id: int
-    role: str
-    session_hash: str
 
 
 @dataclass(frozen=True)
@@ -144,10 +138,12 @@ class WorkoutImportService:
         metrics.result = calculation.metrics
         metrics.metadata_json = {**activity.metadata, "timer_events": activity.events}
 
-    def log_failure(self, athlete_id, filename, source, code, actor=None, digest=None):
+    def log_failure(self, athlete_id, filename, source, code, actor=None, digest=None, guard=None):
         with Session(self.engine) as db:
             db.execute(text("BEGIN IMMEDIATE"))
             self._profile(db, athlete_id, actor)
+            if guard is not None:
+                guard(db)
             db.add(WorkoutImport(
                 athlete_id=athlete_id, source=source, filename=safe_filename(filename),
                 file_sha256=digest, status="failed", error_code=code, candidates=[],
@@ -157,6 +153,7 @@ class WorkoutImportService:
     def import_fit(
         self, athlete_id: int, payload: bytes | bytearray, *, filename: str,
         source: str = "manual", external_id: str | None = None, actor: RequestActor | None = None,
+        guard=None,
     ) -> ImportResult:
         if source not in {"manual", "onelapfit"} or (external_id is not None and not 1 <= len(external_id) <= 256):
             raise ValueError("Unsupported import source or invalid external ID")
@@ -174,20 +171,22 @@ class WorkoutImportService:
             digest = sha256(payload).hexdigest()
             activity = parse_fit(payload, max_bytes=self.max_bytes)
             blocks = pack_samples(activity.samples)
-            return self._commit_import(athlete_id, payload, filename, source, external_id, actor, digest, activity, blocks)
+            return self._commit_import(athlete_id, payload, filename, source, external_id, actor, digest, activity, blocks, guard)
         except OSError as exc:
-            self.log_failure(athlete_id, filename, source, "fit_storage_error", actor, digest)
+            self.log_failure(athlete_id, filename, source, "fit_storage_error", actor, digest, guard)
             raise FitProblem("fit_storage_error", 503) from exc
         except FitProblem as exc:
             if exc.code not in {"authentication_required", "role_denied", "athlete_missing", "athlete_inactive"}:
-                self.log_failure(athlete_id, filename, source, exc.code, actor, digest)
+                self.log_failure(athlete_id, filename, source, exc.code, actor, digest, guard)
             raise
 
-    def _commit_import(self, athlete_id, payload, filename, source, external_id, actor, digest, activity, blocks):
+    def _commit_import(self, athlete_id, payload, filename, source, external_id, actor, digest, activity, blocks, guard):
         key = "external:" + external_id if external_id is not None else "sha256:" + digest
         with Session(self.engine) as db:
             db.execute(text("BEGIN IMMEDIATE"))
             profile = self._profile(db, athlete_id, actor)
+            if guard is not None:
+                guard(db)
             exact = db.get(WorkoutFile, (athlete_id, digest))
             matching = exact or db.scalar(select(WorkoutFile).where(
                 WorkoutFile.athlete_id == athlete_id, WorkoutFile.fit_sha256 == activity.fit_hash,

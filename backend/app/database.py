@@ -15,6 +15,7 @@ def make_engine(settings: Settings):
     @event.listens_for(engine, "connect")
     def configure(connection, _):
         connection.execute("PRAGMA foreign_keys=ON")
+        connection.execute("PRAGMA secure_delete=ON")
 
     return engine
 

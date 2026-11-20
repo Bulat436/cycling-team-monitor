@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -25,6 +25,12 @@ class Settings(BaseSettings):
     session_hours: int = Field(default=24, ge=1, le=168)
     invitation_hours: int = Field(default=72, ge=1, le=720)
     reset_hours: int = Field(default=1, ge=1, le=24)
+    onelap_gateway: str = ""
+    onelap_keys: list[SecretStr] = Field(default_factory=list)
+    onelap_validated: bool = False
+    onelap_interval_seconds: int = Field(default=900, ge=60, le=86400)
+    onelap_history_days: int = Field(default=90, ge=1, le=365)
+    onelap_request_interval_seconds: float = Field(default=1, ge=0.25, le=30)
 
     @property
     def database_file(self) -> Path:

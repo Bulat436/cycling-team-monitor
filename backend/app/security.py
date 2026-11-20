@@ -10,7 +10,7 @@ from fastapi import Depends, HTTPException, Request
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
-from .database import get_db
+from .database import get_db, verify_origin
 from .models import AuditLog, AuthSession, Invitation, User, now
 
 passwords = PasswordHasher()
@@ -70,6 +70,24 @@ def authenticate(request: Request, db: DB) -> Authenticated:
 
 
 Auth = Annotated[Authenticated, Depends(authenticate)]
+
+
+@dataclass(frozen=True)
+class RequestActor:
+    user_id: int
+    role: str
+    session_hash: str
+
+
+def short_lived_actor(request: Request) -> RequestActor:
+    verify_origin(request)
+    # Do not hold a SQLite transaction during a remote request or upload.
+    with Session(request.app.state.engine) as db:
+        auth = authenticate(request, db)
+        return RequestActor(auth.user.id, auth.user.role, auth.session.token_hash)
+
+
+Actor = Annotated[RequestActor, Depends(short_lived_actor)]
 
 
 def require_coach(auth: Auth) -> User:

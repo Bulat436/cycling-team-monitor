@@ -67,7 +67,7 @@ def main() -> None:
     os.environ["CTM_DATABASE_PATH"] = str(database)
     command.upgrade(Config(BACKEND / "alembic.ini"), "head")
     settings = Settings(
-        database_path=database, fit_path=database.parent / "fit", allowed_origins=[origin], serve_frontend=True, secure_cookies=False,
+        database_path=database, fit_path=database.parent / "fit", allowed_origins=[origin], serve_frontend=True, secure_cookies=False, onelap_gateway="", onelap_keys=[],
     )
     password = os.environ["CTM_E2E_PASSWORD"]
     bootstrap_coach(settings, "coach@example.com", "Главный тренер", password)

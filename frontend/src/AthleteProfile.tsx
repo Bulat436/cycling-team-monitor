@@ -5,6 +5,7 @@ import { Link } from 'react-router'
 import { dateLabel, numberLabel, recordedAt, useAthleteResource, useSaveAthleteData } from './athleteApi'
 import type { AthleteProfile, Zone } from './athleteApi'
 import { QueryFeedback, SaveFeedback } from './AthleteFeedback'
+import { OnelapSection } from './OnelapFit'
 
 const timezoneSuggestions = [...new Set([
   'Etc/UTC', 'Europe/Moscow', ...Intl.supportedValuesOf?.('timeZone') ?? [],
@@ -236,7 +237,7 @@ export function ProfilePage({ athleteId, edit = false }: { athleteId: number; ed
           <MeasurementHistory profile={profile} path={path} edit={edit} ftp />
           <ZoneSection title="Зоны мощности" zones={profile.power_zones} edit={edit} path={path + '/zones/power'} unit="Вт" max={5000} />
           <ZoneSection title="Зоны пульса" zones={profile.heart_rate_zones} edit={edit} path={path + '/zones/heart-rate'} unit="уд/мин" max={300} />
-          {!edit && <section className="panel"><h2>OnelapFit</h2><p className="muted">Подключение аккаунта станет доступно на этапе интеграции.</p></section>}
+          <OnelapSection athleteId={athleteId} timezone={profile.timezone} coach={edit} />
         </>
       )}
     </>

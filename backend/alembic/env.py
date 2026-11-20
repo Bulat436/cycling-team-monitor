@@ -1,6 +1,6 @@
 from alembic import context
 
-from app import athlete_models, workout_models  # Register the domain tables in Base.metadata.
+from app import athlete_models, onelap_models, workout_models  # Register the domain tables in Base.metadata.
 from app.config import Settings
 from app.database import make_engine
 from app.models import Base

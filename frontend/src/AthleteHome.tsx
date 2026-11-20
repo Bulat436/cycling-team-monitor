@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 import { durationLabel, recordedAt, useAthleteResource } from './athleteApi'
 import type { WellnessHistory, WorkoutList } from './athleteApi'
 import { QueryFeedback } from './AthleteFeedback'
+import { OnelapSummary } from './OnelapFit'
 import type { Identity } from './api'
 
 export function AthleteHome({ user }: { user: Identity }) {
@@ -38,7 +39,7 @@ export function AthleteHome({ user }: { user: Identity }) {
         </section>
         <section className="panel">
           <h2>Профиль</h2>
-          <p className="muted">OnelapFit будет доступен на этапе интеграции.</p>
+          <OnelapSummary athleteId={user.id} />
           <Link to="/profile">Открыть профиль</Link>
         </section>
       </div>

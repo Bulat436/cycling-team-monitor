@@ -33,7 +33,7 @@ def client(migration, password):
     command.upgrade(config, "head")
     settings = Settings(
         database_path=path, fit_path=path.parent / "fit",
-        allowed_origins=[ORIGIN], secure_cookies=True, serve_frontend=False,
+        allowed_origins=[ORIGIN], secure_cookies=True, serve_frontend=False, onelap_gateway="", onelap_keys=[],
     )
     bootstrap_coach(settings, COACH_EMAIL, "Главный тренер", password)
     with TestClient(create_app(settings), base_url=ORIGIN) as session:

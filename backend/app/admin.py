@@ -10,6 +10,8 @@ from .models import AuditLog, AuthSession, Invitation, User, now
 from .schemas import (
     AccessLink, Account, Action, AuditEntry, CreateInvitation, InvitationInfo, normalize_email,
 )
+from .onelap_models import OnelapConnection
+from .onelap_sync import cancel_connection
 from .security import DB, Coach, audit, revoke_access_links, token_hash
 
 router = APIRouter(prefix="/admin", tags=["Управление доступом"])
@@ -99,6 +101,9 @@ def deactivate(user_id: int, db: DB, coach: Coach):
         raise HTTPException(409, "self_deactivation_denied")
     if user.active:
         user.active = False
+        connection = db.get(OnelapConnection, user.id)
+        if connection:
+            cancel_connection(db, connection)
         revoke_access_links(db, user.id)
         db.execute(delete(AuthSession).where(AuthSession.user_id == user.id))
         audit(db, "account_deactivated", coach.id, user.id)

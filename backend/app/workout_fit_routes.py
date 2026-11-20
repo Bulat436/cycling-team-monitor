@@ -1,29 +1,15 @@
 from typing import Annotated
 from urllib.parse import unquote
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Header, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import ClientDisconnect
 
-from .database import verify_origin
 from .fit_parser import FitProblem
-from .security import authenticate
-from .workout_import import RequestActor
+from .security import Actor
 from .workout_schemas import ImportView, ReprocessOptions
 
 router = APIRouter(tags=["Импорт FIT"])
-
-
-def fit_actor(request: Request) -> RequestActor:
-    verify_origin(request)
-    # Release the read session before streaming the upload or decoding the file.
-    with Session(request.app.state.engine) as db:
-        auth = authenticate(request, db)
-        return RequestActor(auth.user.id, auth.user.role, auth.session.token_hash)
-
-
-Actor = Annotated[RequestActor, Depends(fit_actor)]
 
 
 @router.post(

@@ -9,6 +9,9 @@ from sqlalchemy.orm import Session
 from .config import Settings
 from .database import make_engine
 from .models import AuthSession, User, now
+from .onelap_models import OnelapConnection
+from .onelap_provider import ProviderError, gateway_origin
+from .onelap_secrets import SessionVault
 from .schemas import normalize_email
 from .security import audit, passwords, revoke_access_links
 
@@ -67,6 +70,28 @@ def reset_coach_password(settings: Settings, email: str, password: str) -> None:
         engine.dispose()
 
 
+def rotate_onelap_keys(settings: Settings) -> int:
+    if len(settings.onelap_keys) < 2 or not settings.onelap_gateway:
+        raise ValueError("Укажите HTTPS-адрес шлюза и ключи в порядке от нового к старому.")
+    vault = SessionVault(settings.onelap_keys, gateway_origin(settings.onelap_gateway))
+    if vault.cipher is None:
+        raise ValueError("Не удалось прочитать ключи Fernet.")
+    engine = make_engine(settings)
+    try:
+        with Session(engine) as db:
+            db.execute(text("BEGIN IMMEDIATE"))
+            rows = db.scalars(select(OnelapConnection).where(OnelapConnection.secret.is_not(None))).all()
+            for row in rows:
+                session = vault.open(row.athlete_id, row.generation, row.secret)
+                row.secret = vault.seal(row.athlete_id, row.generation, session)
+            db.commit()
+            return len(rows)
+    except ProviderError:
+        raise ValueError("Ротация отменена. Проверьте прежние ключи и адрес шлюза.") from None
+    finally:
+        engine.dispose()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Локальное администрирование Cycling Team Monitor")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -75,7 +100,15 @@ def main() -> None:
     bootstrap.add_argument("--name", required=True)
     reset = commands.add_parser("reset-coach-password", help="Восстановить доступ активного тренера")
     reset.add_argument("--email", required=True)
+    commands.add_parser("rotate-onelap-keys", help="Перешифровать сессии OnelapFit новым ключом")
     args = parser.parse_args()
+    if args.command == "rotate-onelap-keys":
+        try:
+            count = rotate_onelap_keys(Settings())
+        except ValueError as exc:
+            parser.exit(1, f"{exc}\n")
+        print(f"Перешифровано сессий: {count}")
+        return
     if not sys.stdin.isatty():
         parser.exit(1, "Запустите команду в интерактивном терминале для скрытого ввода пароля.\n")
     password = getpass("Пароль (12–128 символов): ")

@@ -7,3 +7,6 @@ email-validator>=2.2,<3
 argon2-cffi>=23.1,<26
 tzdata>=2025.2,<2028
 fitdecode>=0.11,<0.12
+httpx>=0.28,<1
+cryptography>=46,<50
+portalocker>=3,<4

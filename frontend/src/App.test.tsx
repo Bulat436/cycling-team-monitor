@@ -48,12 +48,12 @@ describe('вход и маршруты по роли', () => {
     expect(screen.queryByRole('link', { name: 'Управление доступом' })).toBeNull()
     expect(fetch).toHaveBeenCalledTimes(1)
     fireEvent.click(screen.getByRole('link', { name: 'На главную' }))
-    expect(await screen.findByRole('heading', { name: 'Дневник' })).toBeVisible()
+    expect(await screen.findByRole('heading', { name: 'Утренний дневник' })).toBeVisible()
   })
 
   it('показывает состав тренеру и передаёт CSRF при выходе', async () => {
     const fetch = vi.fn((url: string, options: RequestInit) => {
-      if (url.endsWith('/users')) return json([])
+      if (url.endsWith('/users') || url.endsWith('/wellness/team')) return json([])
       if (url.endsWith('/logout')) {
         expect(new Headers(options.headers).get('X-CSRF-Token')).toBe('csrf')
         return new Response(null, { status: 204 })

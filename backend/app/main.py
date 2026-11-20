@@ -9,10 +9,10 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from . import admin, auth
+from . import admin, athletes, auth, wellness, workouts
 from .config import ROOT, Settings
 from .database import get_db, make_engine
-from .models import User
+from .athlete_models import AthleteProfile
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -27,7 +27,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             engine.dispose()
 
     app = FastAPI(
-        title="Cycling Team Monitor", version="0.1.0",
+        title="Cycling Team Monitor", version="0.2.0",
         docs_url="/api/v1/docs", redoc_url=None, openapi_url="/api/v1/openapi.json",
         lifespan=lifespan,
     )
@@ -52,13 +52,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/v1/health", tags=["Состояние"])
     def health(db: Annotated[Session, Depends(get_db)]):
         try:
-            db.execute(select(User.id).limit(1))
+            db.execute(select(AthleteProfile.athlete_id).limit(1))
         except SQLAlchemyError as exc:
             raise HTTPException(503, "database_unavailable") from exc
         return {"status": "ok"}
 
     app.include_router(auth.router, prefix="/api/v1")
     app.include_router(admin.router, prefix="/api/v1")
+    app.include_router(athletes.router, prefix="/api/v1")
+    app.include_router(wellness.router, prefix="/api/v1")
+    app.include_router(workouts.router, prefix="/api/v1")
 
     if settings.serve_frontend:
         dist = ROOT / "frontend" / "dist"

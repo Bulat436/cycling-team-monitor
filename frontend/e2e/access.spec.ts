@@ -58,8 +58,9 @@ test('тренер приглашает спортсмена, сбрасывае
     await expect(recipient.getByRole('link', { name: 'Управление доступом' })).toHaveCount(0)
 
     await page.reload()
+    const account = page.getByRole('article').filter({ has: page.getByRole('heading', { name: 'Саша Спринтер' }) })
     page.once('dialog', dialog => void dialog.accept())
-    await page.getByRole('button', { name: 'Сбросить пароль' }).click()
+    await account.getByRole('button', { name: 'Сбросить пароль' }).click()
     const reset = await page.getByLabel('Одноразовая ссылка').inputValue()
     await recipient.reload()
     await expect(recipient).toHaveURL(/\/login$/u)
@@ -68,7 +69,7 @@ test('тренер приглашает спортсмена, сбрасывае
     await expect(recipient.getByRole('heading', { name: 'Главная', exact: true })).toBeVisible()
 
     page.once('dialog', dialog => void dialog.accept())
-    await page.getByRole('button', { name: 'Деактивировать' }).click()
+    await account.getByRole('button', { name: 'Деактивировать' }).click()
     await expect(page.getByText('Деактивирован', { exact: true })).toBeVisible()
     await recipient.reload()
     await expect(recipient).toHaveURL(/\/login$/u)

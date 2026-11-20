@@ -6,6 +6,9 @@ import { Link } from 'react-router'
 import { ApiError, explain, formatDate, request, roleNames } from './api'
 import type { AccessLink, Account, AuditEntry, Invitation, Session } from './api'
 import { forgetSession } from './session'
+import { dateLabel, diaryFields, useAthleteResource } from './athleteApi'
+import type { TeamWellness } from './athleteApi'
+import { QueryFeedback } from './AthleteFeedback'
 
 const usersKey = ['admin', 'users'] as const
 const invitationsKey = ['admin', 'invitations'] as const
@@ -24,6 +27,8 @@ function accountStatus(user: Account) {
 
 export function Team() {
   const accounts = useAccounts()
+  const wellness = useAthleteResource<TeamWellness[]>('/wellness/team', 60_000)
+  const dailyByAthlete = new Map(wellness.data?.map(row => [row.athlete_id, row]))
   const athletes = accounts.data?.filter(user => user.role === 'athlete') ?? []
   const active = athletes.filter(user => user.active && !user.password_pending).length
   const pending = athletes.filter(user => user.active && user.password_pending).length
@@ -43,13 +48,22 @@ export function Team() {
           </dl>
           <section className="panel">
             <h2>Спортсмены команды</h2>
+            <QueryFeedback loading={wellness.isPending} error={wellness.error} retry={() => void wellness.refetch()} />
             {athletes.length ? (
               <div className="table-wrap">
                 <table>
-                  <thead><tr><th scope="col">Имя</th><th scope="col">Электронная почта</th><th scope="col">Доступ</th></tr></thead>
+                  <thead><tr><th scope="col">Имя</th><th scope="col">Группа</th><th scope="col">Доступ</th><th scope="col">Дневник за местную дату</th></tr></thead>
                   <tbody>{athletes.map(user => {
                     const status = accountStatus(user)
-                    return <tr key={user.id}><th scope="row">{user.name}</th><td>{user.email}</td><td><span className={'status ' + status.tone}>{status.label}</span></td></tr>
+                    const daily = dailyByAthlete.get(user.id)
+                    return (
+                      <tr key={user.id}>
+                        <th scope="row"><Link to={'/athletes/' + user.id}>{user.name}</Link></th>
+                        <td>{daily?.team_group ?? '—'}</td>
+                        <td><span className={'status ' + status.tone}>{status.label}</span></td>
+                        <td>{daily ? <DailySummary daily={daily} /> : '—'}</td>
+                      </tr>
+                    )
                   })}</tbody>
                 </table>
               </div>
@@ -61,12 +75,24 @@ export function Team() {
   )
 }
 
-function QueryFeedback({ loading, error, retry }: { loading: boolean; error: Error | null; retry: () => void }) {
-  if (loading) return <p role="status">Загрузка…</p>
-  if (error) return <div className="panel"><p role="alert" className="error">{explain(error)}</p><button className="secondary" onClick={retry}>Повторить</button></div>
-  return null
+function DailySummary({ daily }: { daily: TeamWellness }) {
+  const entry = daily.entry
+  return (
+    <div className="coach-daily">
+      <Link to={'/athletes/' + daily.athlete_id + '/diary'}>{entry ? 'Заполнен' : 'Не заполнен'}</Link>
+      <span className="muted">{dateLabel(daily.local_date)}</span>
+      {entry && (
+        <details>
+          <summary>{entry.illness_symptoms ? 'Есть симптомы · Показатели' : 'Показатели'}</summary>
+          <dl className="coach-scores">
+            {diaryFields.map(field => <div key={field.name}><dt>{field.label}</dt><dd>{entry[field.name]} из 5</dd></div>)}
+            <div><dt>Симптомы заболевания</dt><dd>{entry.illness_symptoms ? 'Да' : 'Нет'}</dd></div>
+          </dl>
+        </details>
+      )}
+    </div>
+  )
 }
-
 function invitationStatus(link: Invitation) {
   if (link.consumed_at) return 'Использована'
   if (link.revoked_at) return 'Отозвана'
@@ -212,6 +238,10 @@ export function ManageAccess({ session }: { session: Session }) {
 
 const auditActions: Record<string, string> = {
   coach_bootstrapped: 'Создан первый тренер',
+  athlete_profile_updated: 'Изменён профиль спортсмена',
+  athlete_ftp_updated: 'Изменён FTP спортсмена',
+  athlete_weight_updated: 'Изменена масса спортсмена',
+  athlete_zones_updated: 'Изменены зоны спортсмена',
   coach_password_reset_by_operator: 'Пароль тренера восстановлен администратором сервера',
   invitation_issued: 'Выдано приглашение',
   invitation_revoked: 'Отозвана ссылка доступа',

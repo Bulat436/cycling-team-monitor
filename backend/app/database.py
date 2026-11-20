@@ -20,11 +20,10 @@ def make_engine(settings: Settings):
 
 
 def get_db(request: Request) -> Iterator[Session]:
-    if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
-        if request.headers.get("origin") not in request.app.state.settings.allowed_origins:
-            raise HTTPException(403, "origin_denied")
+    writing = request.method in {"POST", "PUT", "PATCH", "DELETE"}
+    if writing and request.headers.get("origin") not in request.app.state.settings.allowed_origins:
+        raise HTTPException(403, "origin_denied")
 
     with Session(request.app.state.engine, expire_on_commit=False) as db:
-        if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
-            db.execute(text("BEGIN IMMEDIATE"))
+        db.execute(text("BEGIN IMMEDIATE" if writing else "BEGIN"))
         yield db

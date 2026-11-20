@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from .athlete_models import AthleteProfile
 from .models import AuditLog, AuthSession, Invitation, User, now
 from .schemas import (
     AccessLink, Account, Action, AuditEntry, CreateInvitation, InvitationInfo, normalize_email,
@@ -56,6 +57,8 @@ def invite(payload: CreateInvitation, request: Request, db: DB, coach: Coach):
     user = User(email=email, name=payload.name, role=payload.role)
     db.add(user)
     db.flush()
+    if user.role == "athlete":
+        db.add(AthleteProfile(athlete_id=user.id))
     return issue_link(db, user, coach, request, "activation")
 
 

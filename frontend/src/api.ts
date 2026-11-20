@@ -59,6 +59,13 @@ const messages: Record<string, string> = {
   reset_unavailable: 'Для этой учётной записи нельзя сбросить пароль.',
   self_deactivation_denied: 'Нельзя деактивировать собственную учётную запись.',
   validation_error: 'Проверьте введённые данные.',
+  athlete_missing: 'Профиль спортсмена недоступен.',
+  workout_missing: 'Тренировка недоступна.',
+  future_birth_date: 'Дата рождения не может быть в будущем.',
+  future_weight_date: 'Дата измерения массы не может быть в будущем.',
+  measurement_missing: 'Измерение массы недоступно.',
+  future_diary_date: 'Анкету можно заполнить за сегодня или за прошедшую дату.',
+  invalid_heart_rate_bounds: 'Границы пульсовых зон должны быть в диапазоне 0–300 уд/мин.',
 }
 
 export class ApiError extends Error {
@@ -68,7 +75,7 @@ export class ApiError extends Error {
 }
 
 interface RequestOptions {
-  method?: 'GET' | 'POST'
+  method?: 'GET' | 'POST' | 'PUT'
   body?: unknown
   csrf?: string
   signal?: AbortSignal

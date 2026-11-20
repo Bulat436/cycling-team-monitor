@@ -170,3 +170,81 @@ tbody tr:last-child > * { border-bottom: 0; }
   .stats > div { padding: .5rem; }
   .account { grid-template-columns: minmax(0, 1fr); }
 }
+
+textarea {
+  resize: vertical;
+  min-height: 5rem;
+  width: 100%;
+  padding: .62rem .75rem;
+  border: 1px solid #a9b9ca;
+  border-radius: .5rem;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 400;
+}
+
+.athlete-overview .panel > .button { justify-self: start; }
+.form-stack { display: grid; gap: 1rem; }
+.form-grid, .score-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.date-picker { max-width: 15rem; }
+.measurements { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr)); gap: .65rem .95rem; }
+.measurements div { min-width: 0; padding: .55rem .7rem; border-radius: .5rem; background: #f0f5fa; overflow-wrap: anywhere; }
+.measurements dt { color: var(--muted); font-size: .875rem; }
+.measurements dd { font-weight: 650; }
+.measurement-form, .zone-row { display: grid; align-items: end; gap: .75rem; grid-template-columns: repeat(2, minmax(0, 1fr)) auto; }
+.zone-row { grid-template-columns: minmax(0, 2fr) repeat(2, minmax(0, 1fr)) auto; }
+.future-mark { display: block; color: var(--muted); font-size: .875rem; font-weight: 400; white-space: normal; }
+.back-link { display: inline-block; margin-bottom: .9rem; }
+
+.score-field { display: grid; gap: .45rem; min-width: 0; margin: 0; padding: .65rem .75rem .75rem; border: 1px solid var(--line); border-radius: .6rem; }
+.score-field legend { padding-inline: .25rem; font-weight: 650; }
+.score-field .muted { font-size: .875rem; line-height: 1.4; }
+.choices { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .35rem; }
+.choices.binary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.choice { position: relative; cursor: pointer; }
+.choice input { position: absolute; inset: 0; min-height: 0; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.choice span { display: grid; place-items: center; padding: .2rem; min-height: 44px; border: 1px solid #a9b9ca; border-radius: .45rem; }
+.choice input:checked + span { background: var(--primary); color: white; border-color: var(--primary); }
+.choice input:focus-visible + span { outline: 3px solid #1d78db; outline-offset: 2px; }
+
+.entry-item { border-top: 1px solid var(--line); padding-block: .55rem; }
+.entry-item > summary, .coach-daily summary { cursor: pointer; color: var(--primary); }
+.entry-item > summary { min-height: 44px; padding-block: .35rem; font-weight: 650; }
+.entry-item > summary .status { margin-left: .6rem; }
+.entry-item > :not(summary) { margin-top: .7rem; }
+.entry-comment, .entry-time { overflow-wrap: anywhere; }
+.entry-comment { white-space: pre-wrap; }
+.entry-time { font-size: .875rem; }
+.coach-daily, .coach-scores { display: grid; gap: .3rem; }
+.coach-daily .muted, .coach-scores { font-size: .875rem; }
+.coach-scores { padding-top: .45rem; }
+.coach-scores > div { display: flex; justify-content: space-between; gap: .75rem; }
+.coach-scores dd { white-space: nowrap; }
+
+.notice { margin-bottom: 1rem; padding: .7rem .9rem; border: 1px solid #ead8b7; border-radius: .5rem; background: #fff0d5; color: #76450f; }
+.rpe-form { max-width: 34rem; }
+
+@media (max-width: 760px) {
+  .athlete-workspace .content { padding-bottom: calc(5.5rem + env(safe-area-inset-bottom)); }
+  .athlete-workspace .sidebar nav {
+    position: fixed;
+    z-index: 1;
+    inset: auto 0 0;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    background: var(--navy);
+    gap: .2rem;
+    border-top: 1px solid #52677f;
+    padding: .4rem .3rem calc(.4rem + env(safe-area-inset-bottom));
+  }
+  .athlete-workspace .sidebar nav a { text-align: center; align-content: center; min-height: 44px; padding: .25rem .12rem; }
+  .score-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 520px) {
+  .form-grid, .measurement-form, .zone-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .measurement-form .actions { grid-column: 1 / -1; }
+  .zone-row label:first-child { grid-column: 1 / -1; }
+  .zone-row button { justify-self: start; }
+}

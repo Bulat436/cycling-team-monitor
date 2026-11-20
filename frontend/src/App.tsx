@@ -1,18 +1,24 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Link, Navigate, NavLink, Outlet, Route, Routes } from 'react-router'
+import { Link, Navigate, NavLink, Outlet, Route, Routes, useParams } from 'react-router'
 
 import { ApiError, explain, request, roleNames } from './api'
 import type { Role, Session } from './api'
 import { Audit, ManageAccess, Team } from './Coach'
+import { AthleteHome } from './AthleteHome'
+import { ProfilePage } from './AthleteProfile'
+import { useAthleteResource } from './athleteApi'
+import type { AthleteProfile } from './athleteApi'
+import { DiaryPage } from './Wellness'
+import { WorkoutPage } from './Workouts'
 import { forgetSession, useSession } from './session'
 import { AcceptAccess, Brand, SignIn } from './SignIn'
 
 const athletePages = [
-  { path: '/diary', label: 'Дневник', action: 'Открыть дневник', summary: 'Утренняя анкета появится на следующем этапе.' },
-  { path: '/workouts', label: 'Тренировки', action: 'Открыть тренировки', summary: 'Здесь появятся тренировки после добавления импорта FIT.' },
-  { path: '/profile', label: 'Профиль', action: 'Открыть профиль', summary: 'Данные вашей учётной записи' },
+  { path: '/diary', label: 'Дневник' },
+  { path: '/workouts', label: 'Тренировки' },
+  { path: '/profile', label: 'Профиль' },
 ]
 
 function Shell({ session }: { session: Session }) {
@@ -37,7 +43,7 @@ function Shell({ session }: { session: Session }) {
   }
 
   return (
-    <div className="workspace">
+    <div className={coach ? "workspace" : "workspace athlete-workspace"}>
       <aside className="sidebar">
         <Link className="home-link" to="/"><Brand /></Link>
         <nav aria-label="Разделы">
@@ -78,38 +84,29 @@ function ForRole({ role, children }: { role: Role; children: ReactNode }) {
 
 function Home() {
   const session = useSession().data!
-  if (session.user.role === 'coach') return <Team />
-  return (
-    <>
-      <header className="page-heading"><div><h1>Главная</h1><p>{session.user.name}</p></div></header>
-      <div className="overview">
-        {athletePages.map(page => (
-          <section className="panel" key={page.path}>
-            <h2>{page.label}</h2>
-            <p className="muted">{page.summary}</p>
-            <Link to={page.path}>{page.action}</Link>
-          </section>
-        ))}
-      </div>
-    </>
-  )
+  return session.user.role === 'coach' ? <Team /> : <AthleteHome user={session.user} />
 }
 
-function AthletePage({ page }: { page: (typeof athletePages)[number] }) {
-  const { user } = useSession().data!
-  return (
-    <>
-      <header className="page-heading"><div><h1>{page.label}</h1></div></header>
-      <section className="panel">
-        <p className="muted">{page.summary}</p>
-        {page.path === '/profile' && <dl className="profile">
-          <div><dt>Имя и фамилия</dt><dd>{user.name}</dd></div>
-          <div><dt>Электронная почта</dt><dd>{user.email}</dd></div>
-          <div><dt>Роль</dt><dd>{roleNames[user.role]}</dd></div>
-        </dl>}
-      </section>
-    </>
-  )
+function AthleteArea({ page }: { page: 'diary' | 'workouts' | 'profile' }) {
+  const athleteId = useSession().data!.user.id
+  if (page === 'diary') return <DiaryPage athleteId={athleteId} />
+  if (page === 'workouts') return <WorkoutPage athleteId={athleteId} />
+  return <ProfilePage athleteId={athleteId} />
+}
+
+function CoachAthleteArea({ page }: { page: 'diary' | 'workouts' | 'profile' }) {
+  const athleteId = Number(useParams().athleteId)
+  if (!Number.isSafeInteger(athleteId) || athleteId < 1) {
+    return <section className="panel"><h1>Профиль спортсмена недоступен</h1><Link to="/">К команде</Link></section>
+  }
+  if (page === 'profile') return <ProfilePage key={athleteId} athleteId={athleteId} edit />
+  return <CoachAthleteHistory key={athleteId} athleteId={athleteId} page={page} />
+}
+
+function CoachAthleteHistory({ athleteId, page }: { athleteId: number; page: 'diary' | 'workouts' }) {
+  const profile = useAthleteResource<AthleteProfile>('/athletes/' + athleteId)
+  if (page === 'diary') return <DiaryPage athleteId={athleteId} athleteName={profile.data?.name} readOnly />
+  return <WorkoutPage athleteId={athleteId} athleteName={profile.data?.name} readOnly />
 }
 
 function AccessPage() {
@@ -126,7 +123,12 @@ export function App() {
         <Route index element={<Home />} />
         <Route path="/access" element={<ForRole role="coach"><AccessPage /></ForRole>} />
         <Route path="/access/audit" element={<ForRole role="coach"><Audit /></ForRole>} />
-        {athletePages.map(page => <Route key={page.path} path={page.path} element={<ForRole role="athlete"><AthletePage page={page} /></ForRole>} />)}
+        <Route path="/diary" element={<ForRole role="athlete"><AthleteArea page="diary" /></ForRole>} />
+        <Route path="/workouts" element={<ForRole role="athlete"><AthleteArea page="workouts" /></ForRole>} />
+        <Route path="/profile" element={<ForRole role="athlete"><AthleteArea page="profile" /></ForRole>} />
+        <Route path="/athletes/:athleteId" element={<ForRole role="coach"><CoachAthleteArea page="profile" /></ForRole>} />
+        <Route path="/athletes/:athleteId/diary" element={<ForRole role="coach"><CoachAthleteArea page="diary" /></ForRole>} />
+        <Route path="/athletes/:athleteId/workouts" element={<ForRole role="coach"><CoachAthleteArea page="workouts" /></ForRole>} />
         <Route path="*" element={<section className="panel error-page"><h1>Страница не найдена</h1><Link to="/">На главную</Link></section>} />
       </Route>
     </Routes>

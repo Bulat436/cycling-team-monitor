@@ -1,13 +1,20 @@
+import json
+import zlib
 from time import time
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import FileResponse
 from sqlalchemy import func, select
 
-from .athlete_models import RpeEntry, Workout
+from .athlete_models import AthleteProfile, RpeEntry, Workout
 from .athlete_schemas import RpeValue, RpeView, WorkoutList, WorkoutView
 from .athletes import AthleteScope
+from .fit_parser import MAX_SAMPLES, FitProblem
 from .security import DB, Auth
+from .workout_import import BLOCK_SIZE
+from .workout_models import WorkoutFile, WorkoutMetrics, WorkoutSampleBlock, WorkoutSource
+from .workout_schemas import MetricsView, SamplePage, SourceView, WorkoutDetail
 
 router = APIRouter(tags=["Тренировки и RPE"])
 
@@ -32,10 +39,12 @@ def rpe_view(workout: Workout, rpe: RpeEntry | None) -> RpeView | None:
     )
 
 
-def workout_view(workout: Workout, rpe: RpeEntry | None) -> WorkoutView:
+def workout_view(workout: Workout, rpe: RpeEntry | None, metrics: dict | None) -> WorkoutView:
+    calculated = metrics or {}
     return WorkoutView(
         id=workout.id, athlete_id=workout.athlete_id, started_at=workout.started_at,
-        timer_seconds=workout.timer_seconds, rpe=rpe_view(workout, rpe),
+        timer_seconds=workout.timer_seconds, rpe=rpe_view(workout, rpe), summary=workout.summary,
+        np=calculated.get("np"), tss=calculated.get("tss"),
     )
 
 
@@ -48,7 +57,7 @@ def list_workouts(
     profile, _ = scope
     owned = Workout.athlete_id == profile.athlete_id
     rows = db.execute(
-        select(Workout, RpeEntry).outerjoin(RpeEntry).where(owned)
+        select(Workout, RpeEntry, WorkoutMetrics.result).outerjoin(RpeEntry).outerjoin(WorkoutMetrics).where(owned)
         .order_by(Workout.started_at.desc(), Workout.id.desc()).offset(offset).limit(limit + 1)
     ).all()
     missing = db.scalar(
@@ -56,14 +65,78 @@ def list_workouts(
     )
     return {
         "timezone": profile.timezone, "missing_rpe_count": missing,
-        "workouts": [workout_view(workout, rpe) for workout, rpe in rows[:limit]],
+        "workouts": [workout_view(workout, rpe, metrics) for workout, rpe, metrics in rows[:limit]],
         "has_more": len(rows) > limit,
     }
 
 
-@router.get("/workouts/{workout_id}", response_model=WorkoutView)
+def metrics_view(metrics: WorkoutMetrics | None) -> MetricsView | None:
+    if metrics is None:
+        return None
+    return MetricsView(version=metrics.version, snapshot=metrics.snapshot, result=metrics.result)
+
+
+@router.get("/workouts/{workout_id}", response_model=WorkoutDetail)
 def workout_detail(workout: WorkoutScope, db: DB):
-    return workout_view(workout, db.get(RpeEntry, workout.id))
+    metrics = db.get(WorkoutMetrics, workout.id)
+    stats = workout_view(workout, db.get(RpeEntry, workout.id), metrics.result if metrics else None)
+    profile = db.get(AthleteProfile, workout.athlete_id)
+    sources = db.scalars(select(WorkoutSource).where(WorkoutSource.workout_id == workout.id)
+                         .order_by(WorkoutSource.source, WorkoutSource.source_key)).all()
+    return WorkoutDetail(
+        **stats.model_dump(), timezone=metrics.snapshot["timezone"] if metrics else profile.timezone,
+        metrics=metrics_view(metrics), sources=[SourceView(source=row.source, external_id=row.external_id) for row in sources],
+        original_available=workout.file_sha256 is not None, metadata=metrics.metadata_json if metrics else None,
+    )
+
+
+@router.get("/workouts/{workout_id}/metrics", response_model=MetricsView | None)
+def workout_metrics(workout: WorkoutScope, db: DB):
+    return metrics_view(db.get(WorkoutMetrics, workout.id))
+
+
+@router.get("/workouts/{workout_id}/samples", response_model=SamplePage)
+def workout_samples(
+    workout: WorkoutScope, db: DB,
+    offset: Annotated[int, Query(ge=0, le=MAX_SAMPLES)] = 0,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 512,
+    include_fields: bool = False,
+):
+    total = (workout.summary or {}).get("sample_count", 0)
+    stop = min(offset + limit, total)
+    rows = []
+    if offset < stop:
+        first_block, last_block = offset // BLOCK_SIZE, (stop - 1) // BLOCK_SIZE
+        blocks = db.scalars(
+            select(WorkoutSampleBlock).where(
+                WorkoutSampleBlock.workout_id == workout.id,
+                WorkoutSampleBlock.block_index.between(first_block, last_block),
+            ).order_by(WorkoutSampleBlock.block_index)
+        ).all()
+        for block in blocks:
+            rows.extend(json.loads(zlib.decompress(block.payload)))
+        start = offset % BLOCK_SIZE
+        rows = rows[start:start + stop - offset]
+    if not include_fields:
+        for row in rows:
+            row.pop("fields", None)
+    return {"samples": rows, "offset": offset, "total": total}
+
+
+@router.get("/workouts/{workout_id}/fit")
+def original_fit(workout: WorkoutScope, db: DB, request: Request):
+    if workout.file_sha256 is None:
+        raise HTTPException(404, "fit_original_missing")
+    record = db.get(WorkoutFile, (workout.athlete_id, workout.file_sha256))
+    if record is None or record.workout_id != workout.id:
+        raise HTTPException(404, "fit_original_missing")
+    try:
+        path = request.app.state.workout_import.original_path(workout.athlete_id, record.sha256)
+        if not path.is_file():
+            raise HTTPException(404, "fit_original_missing")
+    except FitProblem as exc:
+        raise HTTPException(exc.status, exc.code) from exc
+    return FileResponse(path, media_type="application/octet-stream", filename=record.filename)
 
 
 @router.get("/workouts/{workout_id}/rpe", response_model=RpeView | None)

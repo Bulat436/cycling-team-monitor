@@ -61,6 +61,21 @@ const messages: Record<string, string> = {
   validation_error: 'Проверьте введённые данные.',
   athlete_missing: 'Профиль спортсмена недоступен.',
   workout_missing: 'Тренировка недоступна.',
+  fit_empty: 'Файл пуст. Выберите исходный FIT-файл тренировки.',
+  fit_extension: 'Выберите файл с расширением .fit.',
+  fit_invalid_signature: 'Содержимое файла не похоже на FIT.',
+  fit_invalid_structure: 'Структура FIT повреждена или не поддерживается. Попробуйте экспортировать тренировку снова.',
+  fit_bad_crc: 'Проверка целостности FIT не прошла. Экспортируйте файл повторно.',
+  fit_not_activity: 'Для импорта нужен FIT с записанной тренировкой.',
+  fit_no_start: 'В FIT отсутствует время начала тренировки.',
+  fit_too_large: 'Файл превышает допустимый размер загрузки.',
+  fit_too_complex: 'Файл превышает допустимую длительность или число записей.',
+  fit_content_type: 'Отправьте FIT как двоичный файл.',
+  fit_source_conflict: 'Источники указывают на разные тренировки. Обратитесь к тренеру.',
+  fit_original_missing: 'Исходный FIT-файл недоступен.',
+  fit_original_changed: 'Исходный файл изменился. Обновите карточку и повторите действие.',
+  fit_storage_error: 'Сервер не смог записать FIT-файл. Повторите попытку позже.',
+  athlete_inactive: 'Учётная запись спортсмена деактивирована.',
   future_birth_date: 'Дата рождения не может быть в будущем.',
   future_weight_date: 'Дата измерения массы не может быть в будущем.',
   measurement_missing: 'Измерение массы недоступно.',
@@ -83,12 +98,18 @@ interface RequestOptions {
 
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const headers = new Headers()
-  if (options.body !== undefined) headers.set('Content-Type', 'application/json')
+  const file = options.body instanceof File ? options.body : null
+  if (file) {
+    headers.set('Content-Type', 'application/octet-stream')
+    headers.set('X-FIT-Filename', encodeURIComponent(file.name))
+  } else if (options.body !== undefined) {
+    headers.set('Content-Type', 'application/json')
+  }
   if (options.csrf) headers.set('X-CSRF-Token', options.csrf)
   const response = await fetch('/api/v1' + path, {
     method: options.method ?? 'GET',
     headers,
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    body: file ?? (options.body === undefined ? undefined : JSON.stringify(options.body)),
     signal: options.signal,
     credentials: 'same-origin',
   })

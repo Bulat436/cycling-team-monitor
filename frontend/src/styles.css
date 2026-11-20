@@ -248,3 +248,13 @@ textarea {
   .zone-row label:first-child { grid-column: 1 / -1; }
   .zone-row button { justify-self: start; }
 }
+
+.fit-upload { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .75rem; align-items: end; }
+.fit-upload input::file-selector-button { margin-right: .6rem; }
+.fit-checkbox { display: flex; align-items: center; gap: .55rem; }
+.fit-checkbox input { width: 1.1rem; min-height: 1.1rem; margin: 0; }
+.measurements dd.muted { font-weight: 400; font-size: .875rem; }
+@media (max-width: 520px) {
+  .fit-upload { grid-template-columns: minmax(0, 1fr); }
+  .fit-upload button { justify-self: start; }
+}

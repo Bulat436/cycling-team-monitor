@@ -31,7 +31,10 @@ def password():
 def client(migration, password):
     path, config = migration
     command.upgrade(config, "head")
-    settings = Settings(database_path=path, allowed_origins=[ORIGIN], secure_cookies=True, serve_frontend=False)
+    settings = Settings(
+        database_path=path, fit_path=path.parent / "fit",
+        allowed_origins=[ORIGIN], secure_cookies=True, serve_frontend=False,
+    )
     bootstrap_coach(settings, COACH_EMAIL, "Главный тренер", password)
     with TestClient(create_app(settings), base_url=ORIGIN) as session:
         yield session

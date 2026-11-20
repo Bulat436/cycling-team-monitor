@@ -94,12 +94,15 @@ class Workout(Recorded, Base):
     __table_args__ = (
         CheckConstraint("timer_seconds >= 0", name="ck_workout_timer"),
         Index("ix_workouts_athlete_started", "athlete_id", "started_at", "id"),
+        Index("ux_workouts_id_athlete", "id", "athlete_id", unique=True),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     athlete_id: Mapped[int] = mapped_column(ForeignKey("athlete_profiles.athlete_id", ondelete="CASCADE"))
     started_at: Mapped[int]
     timer_seconds: Mapped[float | None]
+    file_sha256: Mapped[str | None] = mapped_column(String(64))
+    summary: Mapped[dict | None] = mapped_column(JSON)
 
 
 class RpeEntry(Recorded, Base):

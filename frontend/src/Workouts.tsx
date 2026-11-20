@@ -3,12 +3,12 @@ import type { FormEvent } from 'react'
 import { Link } from 'react-router'
 
 import { durationLabel, numberLabel, recordedAt, useAthleteResource, useSaveAthleteData } from './athleteApi'
-import type { Workout, WorkoutList } from './athleteApi'
+import type { FitImport, Workout, WorkoutList } from './athleteApi'
 import { Pager, QueryFeedback, SaveFeedback } from './AthleteFeedback'
 
 const pageSize = 20
 
-function RpeForm({ workout }: { workout: Workout }) {
+export function RpeForm({ workout }: { workout: Workout }) {
   const save = useSaveAthleteData()
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -36,6 +36,44 @@ function RpeForm({ workout }: { workout: Workout }) {
   )
 }
 
+export function displayMeasure(value: number | null | undefined, unit: string, scale = 1) {
+  return value == null ? 'Нет данных' : numberLabel(value * scale) + (unit ? ' ' + unit : '')
+}
+
+function UploadFit({ onUpload }: { onUpload: () => void }) {
+  const upload = useSaveAthleteData<FitImport>()
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const form = event.currentTarget
+    const file = new FormData(form).get('file')
+    if (!(file instanceof File) || !file.name) return
+    upload.mutate({ path: '/workouts/import', method: 'POST', body: file }, {
+      onSuccess: () => {
+        form.reset()
+        onUpload()
+      },
+    })
+  }
+
+  const result = upload.data
+  return (
+    <section className="panel">
+      <h2>Импорт тренировки</h2>
+      <form className="fit-upload" onSubmit={submit}>
+        <label>Файл тренировки (.fit)<input required type="file" accept=".fit" name="file" /></label>
+        <button disabled={upload.isPending}>{upload.isPending ? 'Обрабатываем FIT…' : 'Загрузить FIT'}</button>
+      </form>
+      <SaveFeedback error={upload.error} saved={false} />
+      {result && <div className="success">
+        <p role="status">{result.status === 'duplicate' ? 'Эта тренировка уже в истории.' : 'Тренировка сохранена.'}</p>
+        {result.potential_duplicates.length > 0 && <p>В истории есть похожая тренировка с другим исходным файлом.</p>}
+        <Link to={'/workouts/' + result.workout_id}>Открыть импортированную тренировку</Link>
+      </div>}
+    </section>
+  )
+}
+
 function WorkoutCard({ workout, timezone, readOnly }: { workout: Workout; timezone: string; readOnly: boolean }) {
   const [editing, setEditing] = useState(false)
   const rpe = workout.rpe
@@ -45,11 +83,20 @@ function WorkoutCard({ workout, timezone, readOnly }: { workout: Workout; timezo
       <h2>{recordedAt(workout.started_at, timezone)}</h2>
       <dl className="measurements">
         <div><dt>Время по таймеру</dt><dd>{durationLabel(workout.timer_seconds)}</dd></div>
+        {workout.summary && <>
+          <div><dt>Дистанция</dt><dd>{displayMeasure(workout.summary.distance_m, 'км', .001)}</dd></div>
+          <div><dt>Средняя мощность</dt><dd>{displayMeasure(workout.summary.avg_power, 'Вт')}</dd></div>
+          <div><dt>NP</dt><dd>{displayMeasure(workout.np, 'Вт')}</dd></div>
+          <div><dt>TSS</dt><dd>{displayMeasure(workout.tss, '')}</dd></div>
+          <div><dt>Средний пульс</dt><dd>{displayMeasure(workout.summary.avg_heart_rate, 'уд/мин')}</dd></div>
+          <div><dt>Средний каденс</dt><dd>{displayMeasure(workout.summary.avg_cadence, 'об/мин')}</dd></div>
+        </>}
         <div><dt>RPE</dt><dd>{rpe ? rpe.score + ' из 10' : <span className="status pending">Не заполнено</span>}</dd></div>
         <div><dt>Нагрузка по RPE</dt><dd>{rpe?.session_load != null ? numberLabel(rpe.session_load) + ' усл. ед.' : 'Нет данных'}</dd></div>
       </dl>
       {rpe?.comment && <p className="entry-comment">{rpe.comment}</p>}
       {rpe && <p className="muted entry-time">Заполнено {recordedAt(rpe.created_at, timezone)} · Изменено {recordedAt(rpe.updated_at, timezone)}</p>}
+      <div className="actions"><Link to={'/workouts/' + workout.id}>Подробнее о тренировке</Link></div>
       {!readOnly && (
         <>
           <div className="actions">
@@ -74,11 +121,12 @@ export function WorkoutPage({ athleteId, readOnly = false, athleteName }: {
     <>
       {readOnly && <Link className="back-link" to={'/athletes/' + athleteId}>К профилю спортсмена</Link>}
       <header className="page-heading"><div><h1>Тренировки</h1>{athleteName && <p>{athleteName}</p>}</div></header>
+      {!readOnly && <UploadFit onUpload={() => setOffset(0)} />}
       <QueryFeedback loading={query.isPending} error={query.error} retry={() => void query.refetch()} />
       {list && (
         <>
           {list.missing_rpe_count > 0 && <p className="notice">Тренировок без RPE — {list.missing_rpe_count}</p>}
-          {list.workouts.length === 0 && <p className="panel muted">Тренировок пока нет. Здесь появятся записи после импорта FIT.</p>}
+          {list.workouts.length === 0 && <p className="panel muted">Тренировок пока нет.</p>}
           {list.workouts.map(workout => <WorkoutCard key={workout.id} workout={workout} timezone={list.timezone} readOnly={readOnly} />)}
           <Pager offset={offset} size={pageSize} hasMore={list.has_more} onChange={setOffset} />
         </>

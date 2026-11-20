@@ -12,6 +12,7 @@ import { useAthleteResource } from './athleteApi'
 import type { AthleteProfile } from './athleteApi'
 import { DiaryPage } from './Wellness'
 import { WorkoutPage } from './Workouts'
+import { WorkoutDetailRoute } from './WorkoutDetail'
 import { forgetSession, useSession } from './session'
 import { AcceptAccess, Brand, SignIn } from './SignIn'
 
@@ -125,6 +126,7 @@ export function App() {
         <Route path="/access/audit" element={<ForRole role="coach"><Audit /></ForRole>} />
         <Route path="/diary" element={<ForRole role="athlete"><AthleteArea page="diary" /></ForRole>} />
         <Route path="/workouts" element={<ForRole role="athlete"><AthleteArea page="workouts" /></ForRole>} />
+        <Route path="/workouts/:workoutId" element={<WorkoutDetailRoute />} />
         <Route path="/profile" element={<ForRole role="athlete"><AthleteArea page="profile" /></ForRole>} />
         <Route path="/athletes/:athleteId" element={<ForRole role="coach"><CoachAthleteArea page="profile" /></ForRole>} />
         <Route path="/athletes/:athleteId/diary" element={<ForRole role="coach"><CoachAthleteArea page="diary" /></ForRole>} />

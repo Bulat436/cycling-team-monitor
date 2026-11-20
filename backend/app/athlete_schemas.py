@@ -155,11 +155,38 @@ class RpeView(RpeValue):
     updated_at: float
 
 
+class WorkoutSummary(BaseModel):
+    elapsed_seconds: float | None
+    moving_seconds: float | None
+    distance_m: float | None
+    avg_speed: float | None
+    max_speed: float | None
+    ascent_m: float | None
+    descent_m: float | None
+    avg_power: float | None
+    max_power: float | None
+    avg_heart_rate: float | None
+    max_heart_rate: float | None
+    avg_cadence: float | None
+    max_cadence: float | None
+    avg_temperature: float | None
+    max_temperature: float | None
+    min_altitude_m: float | None
+    max_altitude_m: float | None
+    calories: float | None
+    gps: bool
+    sample_count: int
+    sports: list[str]
+
+
 class WorkoutView(BaseModel):
     id: int
     athlete_id: int
     started_at: int
     timer_seconds: float | None
+    summary: WorkoutSummary | None
+    np: float | None
+    tss: float | None
     rpe: RpeView | None
 
 

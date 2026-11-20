@@ -242,6 +242,8 @@ const auditActions: Record<string, string> = {
   athlete_ftp_updated: 'Изменён FTP спортсмена',
   athlete_weight_updated: 'Изменена масса спортсмена',
   athlete_zones_updated: 'Изменены зоны спортсмена',
+  workout_reprocessed: 'Повторно обработан FIT',
+  workout_parameters_refreshed: 'Пересчитана тренировка с параметрами профиля',
   coach_password_reset_by_operator: 'Пароль тренера восстановлен администратором сервера',
   invitation_issued: 'Выдано приглашение',
   invitation_revoked: 'Отозвана ссылка доступа',

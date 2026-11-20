@@ -74,11 +74,72 @@ export interface RpeEntry {
   updated_at: number
 }
 
+export interface WorkoutSummary {
+  elapsed_seconds: number | null
+  moving_seconds: number | null
+  distance_m: number | null
+  avg_speed: number | null
+  max_speed: number | null
+  ascent_m: number | null
+  descent_m: number | null
+  avg_power: number | null
+  max_power: number | null
+  avg_heart_rate: number | null
+  max_heart_rate: number | null
+  avg_cadence: number | null
+  max_cadence: number | null
+  avg_temperature: number | null
+  max_temperature: number | null
+  min_altitude_m: number | null
+  max_altitude_m: number | null
+  calories: number | null
+  gps: boolean
+  sample_count: number
+}
+
+export interface ZoneTotals {
+  zones: (Zone & { seconds: number })[]
+  outside_seconds: number
+  unknown_seconds: number
+}
+
+export interface WorkoutDetail extends Workout {
+  timezone: string
+  original_available: boolean
+  sources: { source: string }[]
+  metrics: {
+    version: string
+    snapshot: { ftp_watts: number | null; ftp_effective_from: string | null }
+    result: {
+      if_value: number | null
+      power_zones: ZoneTotals | null
+      heart_rate_zones: ZoneTotals | null
+      power_distribution: { minimum: number; maximum: number; seconds: number }[] | null
+      quality: {
+        timing_source: string
+        expected_seconds: number | null
+        covered_seconds: Record<string, number>
+        missing_channels: string[]
+      }
+      reasons: Record<string, string>
+    }
+  } | null
+}
+
+export interface FitImport {
+  workout_id: number
+  status: 'imported' | 'duplicate' | 'updated'
+  potential_duplicates: number[]
+}
+
 export interface Workout {
   id: number
   athlete_id: number
   started_at: number
   timer_seconds: number | null
+  summary?: WorkoutSummary | null
+  np?: number | null
+  tss?: number | null
   rpe: RpeEntry | null
 }
 
@@ -97,13 +158,13 @@ export function useAthleteResource<T>(path: string, refetchInterval?: number) {
   })
 }
 
-export function useSaveAthleteData() {
+export function useSaveAthleteData<T = unknown>() {
   const client = useQueryClient()
   return useMutation({
     mutationFn: ({ path, method = 'PUT', body }: { path: string; method?: 'POST' | 'PUT'; body: unknown }) => {
       const session = client.getQueryData<Session | null>(sessionKey)
       if (!session) throw new ApiError(401, 'authentication_required')
-      return request(path, { method, body, csrf: session.csrf_token })
+      return request<T>(path, { method, body, csrf: session.csrf_token })
     },
     onSuccess: async () => {
       await client.invalidateQueries({ queryKey: ['athlete-data'] })

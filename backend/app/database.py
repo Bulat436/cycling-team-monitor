@@ -10,7 +10,9 @@ from .config import Settings
 def make_engine(settings: Settings):
     path = settings.database_file
     path.parent.mkdir(parents=True, exist_ok=True)
-    engine = create_engine(URL.create("sqlite", database=str(path)), connect_args={"timeout": 5})
+    engine = create_engine(
+        URL.create("sqlite", database=str(path)), connect_args={"timeout": 5}, hide_parameters=True,
+    )
 
     @event.listens_for(engine, "connect")
     def configure(connection, _):

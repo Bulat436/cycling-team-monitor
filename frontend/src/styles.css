@@ -315,3 +315,16 @@ textarea {
   .coach-stats, .team-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .coach-toolbar .date-range-form label { width: min(100%, 10rem); }
 }
+
+.pwa-actions {
+  position: fixed;
+  z-index: 30;
+  top: max(0.4rem, env(safe-area-inset-top));
+  right: 0.5rem;
+  max-width: calc(100vw - 1rem);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem max(0.75rem, env(safe-area-inset-bottom));
+}

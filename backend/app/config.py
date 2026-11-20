@@ -6,9 +6,16 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def private_storage_path(path: Path) -> Path:
+    resolved = (ROOT / path).resolve()
+    if resolved.is_relative_to((ROOT / "frontend").resolve()):
+        raise ValueError("Application data must be outside the frontend directory")
+    return resolved
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_prefix="CTM_", env_file=ROOT / ".env", extra="ignore"
+        env_prefix="CTM_", env_file=ROOT / ".env", extra="ignore", hide_input_in_errors=True
     )
 
     database_path: Path = Path("data/team.sqlite3")
@@ -22,6 +29,7 @@ class Settings(BaseSettings):
     ]
     secure_cookies: bool = True
     serve_frontend: bool = False
+    expose_api_docs: bool = True
     session_hours: int = Field(default=24, ge=1, le=168)
     invitation_hours: int = Field(default=72, ge=1, le=720)
     reset_hours: int = Field(default=1, ge=1, le=24)
@@ -34,14 +42,11 @@ class Settings(BaseSettings):
 
     @property
     def database_file(self) -> Path:
-        return ROOT / self.database_path
+        return private_storage_path(self.database_path)
 
     @property
     def fit_directory(self) -> Path:
-        directory = (ROOT / self.fit_path).resolve()
-        if directory.is_relative_to((ROOT / "frontend").resolve()):
-            raise ValueError("FIT storage must be outside the frontend directory")
-        return directory
+        return private_storage_path(self.fit_path)
 
     @property
     def cookie_name(self) -> str:

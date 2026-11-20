@@ -5,7 +5,7 @@ from app.config import Settings
 from app.database import make_engine
 from app.models import Base
 
-settings = Settings()
+settings = context.config.attributes.get("settings") or Settings()
 options = {"target_metadata": Base.metadata, "render_as_batch": True}
 
 if context.is_offline_mode():

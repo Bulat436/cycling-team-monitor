@@ -58,8 +58,9 @@ def create_app(
             engine.dispose()
 
     app = FastAPI(
-        title="Cycling Team Monitor", version="0.5.0",
-        docs_url="/api/v1/docs", redoc_url=None, openapi_url="/api/v1/openapi.json",
+        title="Cycling Team Monitor", version="1.0.0rc1",
+        docs_url="/api/v1/docs" if settings.expose_api_docs else None, redoc_url=None,
+        openapi_url="/api/v1/openapi.json" if settings.expose_api_docs else None,
         lifespan=lifespan,
     )
     app.state.settings = settings
@@ -105,14 +106,32 @@ def create_app(
 
     if settings.serve_frontend:
         dist = ROOT / "frontend" / "dist"
-        if not (dist / "index.html").is_file():
-            raise RuntimeError("Frontend build is missing. Run npm run build in frontend.")
+        for name in ("index.html", "sw.js", "manifest.webmanifest"):
+            if not (dist / name).is_file():
+                raise RuntimeError("Production PWA is incomplete. Run npm run build in frontend.")
         app.mount("/assets", StaticFiles(directory=dist / "assets"), name="assets")
+        app.mount("/icons", StaticFiles(directory=dist / "icons"), name="icons")
+
+        @app.get("/sw.js", include_in_schema=False)
+        def service_worker():
+            return FileResponse(dist / "sw.js", media_type="text/javascript", headers={"Cache-Control": "no-cache"})
+
+        @app.get("/manifest.webmanifest", include_in_schema=False)
+        def web_manifest():
+            return FileResponse(dist / "manifest.webmanifest", media_type="application/manifest+json",
+                                headers={"Cache-Control": "no-cache"})
 
         @app.get("/{path:path}", include_in_schema=False)
         def frontend(path: str):
-            if path == "api" or path.startswith("api/"):
+            if path.split("/", 1)[0] in {"api", "data", "fit"}:
                 raise HTTPException(404, "not_found")
-            return FileResponse(dist / "index.html", headers={"Cache-Control": "no-cache"})
+            return FileResponse(dist / "index.html", headers={
+                "Cache-Control": "no-cache",
+                "Content-Security-Policy": (
+                    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+                    "img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; "
+                    "form-action 'self'"
+                ),
+            })
 
     return app

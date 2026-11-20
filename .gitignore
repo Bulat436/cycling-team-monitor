@@ -1,0 +1,16 @@
+/.venv/
+/.env
+/.env.*
+!/.env.example
+/data/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.sqlite*
+*.db
+*.db-wal
+*.db-shm
+/frontend/node_modules/
+/frontend/dist/
+/frontend/test-results/
+/frontend/playwright-report/

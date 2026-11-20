@@ -1,0 +1,30 @@
+from collections.abc import Iterator
+
+from fastapi import HTTPException, Request
+from sqlalchemy import URL, create_engine, event, text
+from sqlalchemy.orm import Session
+
+from .config import Settings
+
+
+def make_engine(settings: Settings):
+    path = settings.database_file
+    path.parent.mkdir(parents=True, exist_ok=True)
+    engine = create_engine(URL.create("sqlite", database=str(path)), connect_args={"timeout": 5})
+
+    @event.listens_for(engine, "connect")
+    def configure(connection, _):
+        connection.execute("PRAGMA foreign_keys=ON")
+
+    return engine
+
+
+def get_db(request: Request) -> Iterator[Session]:
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+        if request.headers.get("origin") not in request.app.state.settings.allowed_origins:
+            raise HTTPException(403, "origin_denied")
+
+    with Session(request.app.state.engine, expire_on_commit=False) as db:
+        if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+            db.execute(text("BEGIN IMMEDIATE"))
+        yield db

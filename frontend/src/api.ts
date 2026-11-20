@@ -61,6 +61,7 @@ const messages: Record<string, string> = {
   validation_error: 'Проверьте введённые данные.',
   athlete_missing: 'Профиль спортсмена недоступен.',
   workout_missing: 'Тренировка недоступна.',
+  invalid_analytics_range: 'Укажите период до 366 дней. Дата начала должна предшествовать или совпадать с датой окончания.',
   onelap_provider_unavailable: 'Интеграция недоступна. Используйте ручной импорт FIT.',
   onelap_key_unavailable: 'Проверьте настройки шифрования на сервере.',
   onelap_https_required: 'Для подключения откройте приложение через HTTPS.',

@@ -75,10 +75,7 @@ def response_error(error: FitProblem | ProviderError) -> HTTPException:
     return HTTPException(status, error.code if error.code == "role_denied" else "onelap_" + error.code, headers=headers)
 
 
-@router.get(account_path, response_model=ConnectionView)
-def status(scope: AthleteScope, db: DB, request: Request):
-    service = request.app.state.onelap
-    connection = db.get(OnelapConnection, scope[0].athlete_id)
+def connection_view(service, connection: OnelapConnection | None) -> ConnectionView:
     return ConnectionView(
         available=service.available,
         validation_pending=service.available and not service.validated,
@@ -92,6 +89,11 @@ def status(scope: AthleteScope, db: DB, request: Request):
         last_success_at=connection.last_success_at if connection else None,
         next_sync_at=connection.next_sync_at if connection and service.available else None,
     )
+
+
+@router.get(account_path, response_model=ConnectionView)
+def status(scope: AthleteScope, db: DB, request: Request):
+    return connection_view(request.app.state.onelap, db.get(OnelapConnection, scope[0].athlete_id))
 
 
 @router.post("/onelapfit/connect", status_code=204)

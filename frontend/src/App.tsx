@@ -1,15 +1,16 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Link, Navigate, NavLink, Outlet, Route, Routes, useParams } from 'react-router'
+import { Link, Navigate, NavLink, Outlet, Route, Routes } from 'react-router'
 
 import { ApiError, explain, request, roleNames } from './api'
 import type { Role, Session } from './api'
-import { Audit, ManageAccess, Team } from './Coach'
+import { Audit, ManageAccess } from './Coach'
+import { Team } from './Team'
+import { AlertSettingsPage } from './AlertSettings'
+import { CoachAthlete, CoachAthleteTab } from './CoachAthlete'
 import { AthleteHome } from './AthleteHome'
 import { ProfilePage } from './AthleteProfile'
-import { useAthleteResource } from './athleteApi'
-import type { AthleteProfile } from './athleteApi'
 import { DiaryPage } from './Wellness'
 import { WorkoutPage } from './Workouts'
 import { WorkoutDetailRoute } from './WorkoutDetail'
@@ -44,7 +45,7 @@ function Shell({ session }: { session: Session }) {
   }
 
   return (
-    <div className={coach ? "workspace" : "workspace athlete-workspace"}>
+    <div className={coach ? "workspace coach-workspace" : "workspace athlete-workspace"}>
       <aside className="sidebar">
         <Link className="home-link" to="/"><Brand /></Link>
         <nav aria-label="Разделы">
@@ -95,21 +96,6 @@ function AthleteArea({ page }: { page: 'diary' | 'workouts' | 'profile' }) {
   return <ProfilePage athleteId={athleteId} />
 }
 
-function CoachAthleteArea({ page }: { page: 'diary' | 'workouts' | 'profile' }) {
-  const athleteId = Number(useParams().athleteId)
-  if (!Number.isSafeInteger(athleteId) || athleteId < 1) {
-    return <section className="panel"><h1>Профиль спортсмена недоступен</h1><Link to="/">К команде</Link></section>
-  }
-  if (page === 'profile') return <ProfilePage key={athleteId} athleteId={athleteId} edit />
-  return <CoachAthleteHistory key={athleteId} athleteId={athleteId} page={page} />
-}
-
-function CoachAthleteHistory({ athleteId, page }: { athleteId: number; page: 'diary' | 'workouts' }) {
-  const profile = useAthleteResource<AthleteProfile>('/athletes/' + athleteId)
-  if (page === 'diary') return <DiaryPage athleteId={athleteId} athleteName={profile.data?.name} readOnly />
-  return <WorkoutPage athleteId={athleteId} athleteName={profile.data?.name} readOnly />
-}
-
 function AccessPage() {
   return <ManageAccess session={useSession().data!} />
 }
@@ -128,9 +114,15 @@ export function App() {
         <Route path="/workouts" element={<ForRole role="athlete"><AthleteArea page="workouts" /></ForRole>} />
         <Route path="/workouts/:workoutId" element={<WorkoutDetailRoute />} />
         <Route path="/profile" element={<ForRole role="athlete"><AthleteArea page="profile" /></ForRole>} />
-        <Route path="/athletes/:athleteId" element={<ForRole role="coach"><CoachAthleteArea page="profile" /></ForRole>} />
-        <Route path="/athletes/:athleteId/diary" element={<ForRole role="coach"><CoachAthleteArea page="diary" /></ForRole>} />
-        <Route path="/athletes/:athleteId/workouts" element={<ForRole role="coach"><CoachAthleteArea page="workouts" /></ForRole>} />
+        <Route path="/alerts/settings" element={<ForRole role="coach"><AlertSettingsPage /></ForRole>} />
+        <Route path="/athletes/:athleteId" element={<ForRole role="coach"><CoachAthlete /></ForRole>}>
+          <Route index element={<CoachAthleteTab page="overview" />} />
+          <Route path="diary" element={<CoachAthleteTab page="diary" />} />
+          <Route path="workouts" element={<CoachAthleteTab page="workouts" />} />
+          <Route path="analytics" element={<CoachAthleteTab page="analytics" />} />
+          <Route path="training" element={<CoachAthleteTab page="training" />} />
+          <Route path="profile" element={<CoachAthleteTab page="profile" />} />
+        </Route>
         <Route path="*" element={<section className="panel error-page"><h1>Страница не найдена</h1><Link to="/">На главную</Link></section>} />
       </Route>
     </Routes>

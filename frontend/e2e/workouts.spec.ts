@@ -25,6 +25,7 @@ test('импорт FIT, карточка, RPE, повторная загрузк
   await expect(historyCards).toHaveCount(3)
   await page.getByRole('link', { name: 'Открыть импортированную тренировку' }).click()
   await expect(page.getByRole('heading', { name: 'Сводка FIT' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Показания датчиков' })).toHaveCount(0)
   await expect(page.getByText('0,6 км', { exact: true })).toBeVisible()
   await expect(page.getByText('Записан маршрут')).toBeVisible()
   await expect(page.getByText('В истории нет FTP, действовавшего на дату тренировки.')).toHaveCount(2)

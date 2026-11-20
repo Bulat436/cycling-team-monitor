@@ -6,8 +6,6 @@ import { Link } from 'react-router'
 import { ApiError, explain, formatDate, request, roleNames } from './api'
 import type { AccessLink, Account, AuditEntry, Invitation, Session } from './api'
 import { forgetSession } from './session'
-import { dateLabel, diaryFields, useAthleteResource } from './athleteApi'
-import type { TeamWellness } from './athleteApi'
 import { QueryFeedback } from './AthleteFeedback'
 
 const usersKey = ['admin', 'users'] as const
@@ -25,74 +23,6 @@ function accountStatus(user: Account) {
   return { label: 'Активен', tone: 'active' }
 }
 
-export function Team() {
-  const accounts = useAccounts()
-  const wellness = useAthleteResource<TeamWellness[]>('/wellness/team', 60_000)
-  const dailyByAthlete = new Map(wellness.data?.map(row => [row.athlete_id, row]))
-  const athletes = accounts.data?.filter(user => user.role === 'athlete') ?? []
-  const active = athletes.filter(user => user.active && !user.password_pending).length
-  const pending = athletes.filter(user => user.active && user.password_pending).length
-  return (
-    <>
-      <header className="page-heading">
-        <div><h1>Команда</h1><p>Состав и доступ спортсменов</p></div>
-        <Link className="button" to="/access">Пригласить спортсмена</Link>
-      </header>
-      <QueryFeedback loading={accounts.isPending} error={accounts.error} retry={() => void accounts.refetch()} />
-      {accounts.data && (
-        <>
-          <dl className="stats">
-            <div><dt>Спортсмены</dt><dd>{athletes.length}</dd></div>
-            <div><dt>Активные аккаунты</dt><dd>{active}</dd></div>
-            <div><dt>Ожидают пароль</dt><dd>{pending}</dd></div>
-          </dl>
-          <section className="panel">
-            <h2>Спортсмены команды</h2>
-            <QueryFeedback loading={wellness.isPending} error={wellness.error} retry={() => void wellness.refetch()} />
-            {athletes.length ? (
-              <div className="table-wrap">
-                <table>
-                  <thead><tr><th scope="col">Имя</th><th scope="col">Группа</th><th scope="col">Доступ</th><th scope="col">Дневник за местную дату</th></tr></thead>
-                  <tbody>{athletes.map(user => {
-                    const status = accountStatus(user)
-                    const daily = dailyByAthlete.get(user.id)
-                    return (
-                      <tr key={user.id}>
-                        <th scope="row"><Link to={'/athletes/' + user.id}>{user.name}</Link></th>
-                        <td>{daily?.team_group ?? '—'}</td>
-                        <td><span className={'status ' + status.tone}>{status.label}</span></td>
-                        <td>{daily ? <DailySummary daily={daily} /> : '—'}</td>
-                      </tr>
-                    )
-                  })}</tbody>
-                </table>
-              </div>
-            ) : <p className="muted">В команде пока нет спортсменов. Пригласите первого, чтобы открыть ему доступ.</p>}
-          </section>
-        </>
-      )}
-    </>
-  )
-}
-
-function DailySummary({ daily }: { daily: TeamWellness }) {
-  const entry = daily.entry
-  return (
-    <div className="coach-daily">
-      <Link to={'/athletes/' + daily.athlete_id + '/diary'}>{entry ? 'Заполнен' : 'Не заполнен'}</Link>
-      <span className="muted">{dateLabel(daily.local_date)}</span>
-      {entry && (
-        <details>
-          <summary>{entry.illness_symptoms ? 'Есть симптомы · Показатели' : 'Показатели'}</summary>
-          <dl className="coach-scores">
-            {diaryFields.map(field => <div key={field.name}><dt>{field.label}</dt><dd>{entry[field.name]} из 5</dd></div>)}
-            <div><dt>Симптомы заболевания</dt><dd>{entry.illness_symptoms ? 'Да' : 'Нет'}</dd></div>
-          </dl>
-        </details>
-      )}
-    </div>
-  )
-}
 function invitationStatus(link: Invitation) {
   if (link.consumed_at) return 'Использована'
   if (link.revoked_at) return 'Отозвана'
@@ -246,6 +176,7 @@ const auditActions: Record<string, string> = {
   onelap_connected: 'Подключён OnelapFit',
   onelap_disconnected: 'Отключён OnelapFit',
   onelap_sync_requested: 'Запрошена синхронизация OnelapFit',
+  alert_settings_updated: 'Изменены правила предупреждений',
   workout_parameters_refreshed: 'Пересчитана тренировка с параметрами профиля',
   coach_password_reset_by_operator: 'Пароль тренера восстановлен администратором сервера',
   invitation_issued: 'Выдано приглашение',

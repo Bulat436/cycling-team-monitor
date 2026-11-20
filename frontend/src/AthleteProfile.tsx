@@ -1,6 +1,5 @@
 import { useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Link } from 'react-router'
 
 import { dateLabel, numberLabel, recordedAt, useAthleteResource, useSaveAthleteData } from './athleteApi'
 import type { AthleteProfile, Zone } from './athleteApi'
@@ -195,25 +194,26 @@ function ZoneSection({ title, zones, edit, path, unit, max }: {
   )
 }
 
-export function ProfilePage({ athleteId, edit = false }: { athleteId: number; edit?: boolean }) {
+export function ProfilePage({ athleteId, edit = false, view = 'all' }: {
+  athleteId: number; edit?: boolean; view?: 'profile' | 'training' | 'all'
+}) {
   const path = '/athletes/' + athleteId
   const query = useAthleteResource<AthleteProfile>(path)
   const profile = query.data
 
   return (
     <>
-      {edit && <Link className="back-link" to="/">К команде</Link>}
       <header className="page-heading">
-        <div><h1>{edit ? 'Профиль спортсмена' : 'Профиль'}</h1>{profile && <p>{profile.name}</p>}</div>
-        {edit && profile && <div className="actions">
-          <Link className="button secondary" to={path + '/diary'}>Дневник спортсмена</Link>
-          <Link className="button secondary" to={path + '/workouts'}>Тренировки спортсмена</Link>
-        </div>}
+        <div>
+          <h1>{view === 'training' ? 'FTP и зоны' : edit ? 'Профиль спортсмена' : 'Профиль'}</h1>
+          {!edit && profile && <p>{profile.name}</p>}
+          {view === 'training' && profile && <p>Текущий FTP · <strong>{profile.current_ftp ? profile.current_ftp.watts + ' Вт' : 'Нет данных'}</strong></p>}
+        </div>
       </header>
       <QueryFeedback loading={query.isPending} error={query.error} retry={() => void query.refetch()} />
       {profile && (
         <>
-          <section className="panel">
+          {view !== 'training' && <section className="panel">
             <h2>Данные спортсмена</h2>
             <dl className="measurements">
               <div><dt>ID спортсмена</dt><dd>{profile.athlete_id}</dd></div>
@@ -232,12 +232,14 @@ export function ProfilePage({ athleteId, edit = false }: { athleteId: number; ed
                 <div><dt>Часовой пояс</dt><dd>{profile.timezone}</dd></div>
               </dl>
             )}
-          </section>
-          <MeasurementHistory profile={profile} path={path} edit={edit} ftp={false} />
+          </section>}
+          {view !== 'training' && <MeasurementHistory profile={profile} path={path} edit={edit} ftp={false} />}
+          {view !== 'profile' && <>
           <MeasurementHistory profile={profile} path={path} edit={edit} ftp />
           <ZoneSection title="Зоны мощности" zones={profile.power_zones} edit={edit} path={path + '/zones/power'} unit="Вт" max={5000} />
           <ZoneSection title="Зоны пульса" zones={profile.heart_rate_zones} edit={edit} path={path + '/zones/heart-rate'} unit="уд/мин" max={300} />
-          <OnelapSection athleteId={athleteId} timezone={profile.timezone} coach={edit} />
+          </>}
+          {!edit && <OnelapSection athleteId={athleteId} timezone={profile.timezone} coach={false} />}
         </>
       )}
     </>

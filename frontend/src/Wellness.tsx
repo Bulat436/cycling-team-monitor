@@ -91,7 +91,7 @@ export function DiaryPage({ athleteId, readOnly = false, athleteName }: {
   const date = selected || history?.local_date || ''
   return (
     <>
-      {readOnly && <Link className="back-link" to={'/athletes/' + athleteId}>К профилю спортсмена</Link>}
+      {readOnly && <Link className="back-link" to={'/athletes/' + athleteId}>К обзору спортсмена</Link>}
       <header className="page-heading"><div><h1>Утренний дневник</h1>{athleteName && <p>{athleteName}</p>}</div></header>
       <QueryFeedback loading={diary.isPending} error={diary.error} retry={() => void diary.refetch()} />
       {history && (

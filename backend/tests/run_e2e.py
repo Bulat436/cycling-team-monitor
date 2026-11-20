@@ -4,6 +4,7 @@ import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+from time import time
 from urllib.parse import urlsplit
 
 import uvicorn
@@ -14,7 +15,7 @@ from sqlalchemy.orm import Session
 BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
 
-from app.athlete_models import AthleteProfile, WellnessEntry, Workout
+from app.athlete_models import AthleteProfile, FtpRecord, HeartRateZoneProfile, PowerZoneProfile, WellnessEntry, Workout
 from app.athletes import local_date
 from app.cli import bootstrap_coach
 from app.config import Settings
@@ -22,6 +23,8 @@ from app.database import make_engine
 from app.main import create_app
 from app.models import User, now
 from app.security import passwords
+from app.workout_import import WorkoutImportService
+from fit_fixtures import cycling_fit
 
 
 def seed_stage_b(settings: Settings, password: str) -> None:
@@ -59,6 +62,33 @@ def seed_stage_b(settings: Settings, password: str) -> None:
         engine.dispose()
 
 
+def seed_analytics(settings: Settings, password: str) -> None:
+    engine = make_engine(settings)
+    start = int(time()) - 2 * 86400
+    try:
+        with Session(engine) as db:
+            user = User(
+                email="analytics-review@example.com", name="Спортсмен analytics-review", role="athlete",
+                password_hash=passwords.hash(password), activated_at=now(),
+            )
+            db.add(user)
+            db.flush()
+            athlete_id = user.id
+            db.add(AthleteProfile(athlete_id=athlete_id, team_group="Шоссе"))
+            db.flush()
+            db.add_all([
+                FtpRecord(athlete_id=athlete_id, effective_from=local_date("Europe/Moscow", start), watts=250),
+                PowerZoneProfile(athlete_id=athlete_id, zones=[{"name": "Рабочая", "minimum": 200, "maximum": None}]),
+                HeartRateZoneProfile(athlete_id=athlete_id, zones=[{"name": "Рабочая", "minimum": 130, "maximum": 160}]),
+            ])
+            db.commit()
+        importer = WorkoutImportService(engine, settings)
+        importer.import_fit(athlete_id, cycling_fit(start=start), filename="power.fit")
+        importer.import_fit(athlete_id, cycling_fit(start=start + 86400, power=None), filename="no-power.fit")
+    finally:
+        engine.dispose()
+
+
 def main() -> None:
     origin = os.environ["CTM_E2E_ORIGIN"]
     address = urlsplit(origin)
@@ -72,6 +102,7 @@ def main() -> None:
     password = os.environ["CTM_E2E_PASSWORD"]
     bootstrap_coach(settings, "coach@example.com", "Главный тренер", password)
     seed_stage_b(settings, password)
+    seed_analytics(settings, password)
     uvicorn.run(create_app(settings), host=address.hostname, port=address.port)
 
 

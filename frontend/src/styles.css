@@ -258,3 +258,60 @@ textarea {
   .fit-upload { grid-template-columns: minmax(0, 1fr); }
   .fit-upload button { justify-self: start; }
 }
+
+.coach-workspace { grid-template-columns: 13.5rem minmax(0, 1fr); }
+.coach-workspace .content { max-width: 110rem; padding: clamp(1rem, 2.5vw, 3rem); }
+.coach-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.coach-toolbar { margin-bottom: 1rem; }
+.coach-toolbar + .panel { margin-top: 0; }
+.period-buttons { display: flex; gap: .45rem; flex-wrap: wrap; }
+.period-buttons button[aria-pressed="true"] { background: #174f94; color: white; border-color: #174f94; }
+.date-range-form { display: flex; align-items: end; flex-wrap: wrap; gap: .65rem; }
+.date-range-form label { width: min(100%, 12rem); }
+.team-filters { display: grid; grid-template-columns: minmax(11rem, 1.25fr) repeat(6, minmax(7.5rem, 1fr)); gap: .55rem; }
+.team-table { min-width: 66rem; font-size: .9rem; }
+.team-table td, .team-table th { padding: .72rem .6rem; }
+.team-table tbody th { white-space: normal; min-width: 9rem; }
+.team-table th:last-child { min-width: 9rem; }
+.team-table tbody tr:nth-child(even) { background: #f8fafc; }
+.team-table .coach-cell { display: flex; flex-direction: column; align-items: start; gap: .34rem; }
+.team-table .coach-cell .muted { font-size: .875rem; }
+.team-table summary { cursor: pointer; color: var(--primary); }
+.coach-alerts, .omitted-list { display: flex; align-content: start; flex-wrap: wrap; gap: .34rem; list-style: none; padding: 0; margin: 0; }
+.coach-alerts .status { white-space: normal; }
+.omitted-list li { color: var(--muted); font-size: .875rem; }
+.athlete-link { font-size: 1rem; }
+.athlete-card-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: .4rem 1.2rem; margin-bottom: .65rem; }
+.athlete-card-heading p { font-size: clamp(1.35rem, 2.5vw, 1.9rem); font-weight: 700; letter-spacing: -.025em; }
+.athlete-tabs { display: flex; gap: .35rem; flex-wrap: wrap; border-bottom: 1px solid var(--line); margin-bottom: 1.2rem; }
+.athlete-tabs a { display: inline-grid; min-height: 44px; align-items: center; padding: .35rem .78rem; border-bottom: 3px solid transparent; text-decoration: none; }
+.athlete-tabs a.active { border-color: var(--primary); background: #eaf3ff; font-weight: 700; }
+.athlete-tabs a:hover { background: #eaf3ff; }
+.analytics-stack, .sensor-charts { display: grid; gap: 1rem; min-width: 0; }
+.analytics-stack > .stats { margin-bottom: 0; }
+.analytics-stack .panel + .panel, .analytics-pair .panel + .panel { margin-top: 0; }
+.analytics-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin-bottom: 1rem; }
+.analytics-stack .analytics-pair { margin-bottom: 0; }
+.chart-header { display: flex; justify-content: space-between; gap: .75rem; align-items: end; flex-wrap: wrap; }
+.chart-frame { width: 100%; min-width: 0; height: 17rem; }
+.chart-frame.horizontal-chart { overflow: auto; max-height: 23rem; height: auto; }
+.sensor-chart { min-width: 0; }
+.sensor-chart h3 { margin: .5rem .15rem; }
+.sensor-charts .chart-frame { height: 14rem; }
+#onelapfit { scroll-margin-top: 1rem; }
+
+@media (max-width: 1400px) {
+  .team-filters { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (max-width: 1100px) {
+  .coach-workspace { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }
+  .coach-workspace .sidebar { display: flex; flex-direction: row; align-items: center; gap: .9rem; justify-content: space-between; flex-wrap: wrap; padding: .65rem 1rem; }
+  .coach-workspace .sidebar nav { display: flex; flex-wrap: wrap; }
+  .coach-workspace .sidebar-account { display: flex; align-items: center; flex-wrap: wrap; gap: .45rem; padding: 0; border: 0; margin: 0; }
+  .coach-workspace .sidebar-account button { margin: 0; }
+}
+@media (max-width: 850px) {
+  .analytics-pair { grid-template-columns: minmax(0, 1fr); }
+  .coach-stats, .team-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .coach-toolbar .date-range-form label { width: min(100%, 10rem); }
+}

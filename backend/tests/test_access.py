@@ -46,7 +46,7 @@ def test_migrations_create_wal_and_round_trip(migration):
     command.check(config)
     with sqlite3.connect(path) as db:
         assert db.execute("PRAGMA journal_mode").fetchone() == ("wal",)
-        assert db.execute("SELECT version_num FROM alembic_version").fetchone() == ("0004_onelap",)
+        assert db.execute("SELECT version_num FROM alembic_version").fetchone() == ("0005_coach",)
     command.downgrade(config, "base")
     with sqlite3.connect(path) as db:
         assert db.execute("SELECT name FROM sqlite_master WHERE name = 'users'").fetchone() is None

@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Link } from 'react-router'
+import { Link, useLocation } from 'react-router'
 
 import { QueryFeedback, SaveFeedback } from './AthleteFeedback'
 import { ApiError, request } from './api'
@@ -9,7 +9,7 @@ import type { Session } from './api'
 import { forgetSession, sessionKey } from './session'
 import { recordedAt, useAthleteResource, useSaveAthleteData } from './athleteApi'
 
-interface Connection {
+export interface Connection {
   available: boolean
   validation_pending: boolean
   status: string
@@ -87,7 +87,7 @@ function useConnection(athleteId: number) {
   return useAthleteResource<Connection>('/athletes/' + athleteId + '/onelapfit', 10_000)
 }
 
-function StatusLabel({ connection }: { connection: Connection }) {
+export function StatusLabel({ connection }: { connection: Connection }) {
   const tone = connection.status === 'synced' ? 'active' : connection.status === 'unavailable' ? 'neutral' : 'pending'
   return <span className={'status ' + tone}>{connectionLabels[connection.status] ?? 'Статус недоступен'}</span>
 }
@@ -99,10 +99,10 @@ export function OnelapSummary({ athleteId }: { athleteId: number }) {
   return <p>OnelapFit · <StatusLabel connection={query.data} /></p>
 }
 
-function History({ athleteId, timezone }: { athleteId: number; timezone: string }) {
+function History({ athleteId, timezone, open }: { athleteId: number; timezone: string; open: boolean }) {
   const history = useAthleteResource<Run[]>('/athletes/' + athleteId + '/onelapfit/runs', 10_000)
   return (
-    <details className="entry-item">
+    <details className="entry-item" open={open || undefined}>
       <summary>Журнал синхронизации</summary>
       <QueryFeedback loading={history.isPending} error={history.error} retry={() => void history.refetch()} />
       {history.data?.length === 0 && <p className="muted">Запусков пока нет.</p>}
@@ -137,6 +137,11 @@ export function OnelapSection({ athleteId, timezone, coach }: { athleteId: numbe
   const connection = query.data
   const active = connection?.status === 'syncing' || connection?.status === 'checking'
   const base = '/athletes/' + athleteId + '/onelapfit'
+  const jumpToHistory = useLocation().hash === '#onelapfit'
+  const section = useRef<HTMLElement>(null)
+  useEffect(() => {
+    if (jumpToHistory) section.current?.scrollIntoView?.()
+  }, [jumpToHistory])
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -161,7 +166,7 @@ export function OnelapSection({ athleteId, timezone, coach }: { athleteId: numbe
   }
 
   return (
-    <section className="panel">
+    <section className="panel" id="onelapfit" ref={section}>
       <h2>OnelapFit</h2>
       <QueryFeedback loading={query.isPending} error={query.error} retry={() => void query.refetch()} />
       {connection && (
@@ -199,7 +204,7 @@ export function OnelapSection({ athleteId, timezone, coach }: { athleteId: numbe
           )}
           <SaveFeedback error={action.error} saved={false} />
           {action.isSuccess && <p className="success" role="status">{action.variables?.path === '/onelapfit/disconnect' ? 'Подключение отключено.' : 'Запуск добавлен в очередь.'}</p>}
-          <History athleteId={athleteId} timezone={timezone} />
+          <History athleteId={athleteId} timezone={timezone} open={jumpToHistory} />
         </>
       )}
     </section>

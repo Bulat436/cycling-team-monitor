@@ -1,24 +1,13 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { Link, useParams } from 'react-router'
 
-import { dateLabel, durationLabel, recordedAt, useAthleteResource, useSaveAthleteData } from './athleteApi'
+import { dateLabel, durationLabel, metricReasonLabels as reasons, recordedAt, useAthleteResource, useSaveAthleteData } from './athleteApi'
 import type { WorkoutDetail, ZoneTotals } from './athleteApi'
 import { QueryFeedback, SaveFeedback } from './AthleteFeedback'
 import { useSession } from './session'
 import { displayMeasure, RpeForm } from './Workouts'
 
-const reasons: Record<string, string> = {
-  channel_missing: 'В FIT нет записей этого датчика.',
-  zones_not_configured: 'Индивидуальные зоны не настроены для этого расчёта.',
-  timer_unresolved: 'По FIT не удалось определить участки с работающим таймером.',
-  no_active_samples: 'Нет показаний при работающем таймере.',
-  short_power_windows: 'Для NP нужно хотя бы одно полное окно длительностью 30 секунд.',
-  insufficient_power_coverage: 'В ряду мощности слишком много пропусков для расчёта NP.',
-  ftp_missing: 'В истории нет FTP, действовавшего на дату тренировки.',
-  timer_missing: 'В FIT отсутствует надёжное время таймера.',
-  speed_coverage_missing: 'В FIT нет времени движения и недостаточно показаний скорости.',
-  non_cycling_activity: 'NP рассчитан только для велотренировок.',
-}
+const WorkoutCharts = lazy(() => import('./WorkoutCharts'))
 
 const channelNames: Record<string, string> = {
   power: 'мощность', heart_rate: 'пульс', cadence: 'каденс', speed: 'скорость',
@@ -129,6 +118,7 @@ function WorkoutDetails({ workout, coach }: { workout: WorkoutDetail; coach: boo
         {rpe && <p className="muted">Заполнено {recordedAt(rpe.created_at, workout.timezone)} · Изменено {recordedAt(rpe.updated_at, workout.timezone)}</p>}
         {!coach && <RpeForm workout={workout} />}
       </section>
+      {coach && <Suspense fallback={<p role="status">Загружаем графики…</p>}><WorkoutCharts workoutId={workout.id} /></Suspense>}
       <ZoneSection title="Зоны мощности" value={result?.power_zones} reason={perMetric.power_zones} />
       <ZoneSection title="Зоны пульса" value={result?.heart_rate_zones} reason={perMetric.heart_rate_zones} />
       <section className="panel">

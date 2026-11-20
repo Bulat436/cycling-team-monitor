@@ -6,6 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
 from .athlete_models import AthleteProfile, RpeEntry, Workout
 from .athlete_schemas import RpeValue, RpeView, WorkoutList, WorkoutView
@@ -95,6 +96,14 @@ def workout_metrics(workout: WorkoutScope, db: DB):
     return metrics_view(db.get(WorkoutMetrics, workout.id))
 
 
+def read_sample_blocks(db: Session, workout_id: int, block_range: tuple[int, int] | None = None):
+    query = select(WorkoutSampleBlock.payload).where(WorkoutSampleBlock.workout_id == workout_id)
+    if block_range is not None:
+        query = query.where(WorkoutSampleBlock.block_index.between(*block_range))
+    for payload in db.scalars(query.order_by(WorkoutSampleBlock.block_index).execution_options(yield_per=8)):
+        yield json.loads(zlib.decompress(payload))
+
+
 @router.get("/workouts/{workout_id}/samples", response_model=SamplePage)
 def workout_samples(
     workout: WorkoutScope, db: DB,
@@ -107,14 +116,8 @@ def workout_samples(
     rows = []
     if offset < stop:
         first_block, last_block = offset // BLOCK_SIZE, (stop - 1) // BLOCK_SIZE
-        blocks = db.scalars(
-            select(WorkoutSampleBlock).where(
-                WorkoutSampleBlock.workout_id == workout.id,
-                WorkoutSampleBlock.block_index.between(first_block, last_block),
-            ).order_by(WorkoutSampleBlock.block_index)
-        ).all()
-        for block in blocks:
-            rows.extend(json.loads(zlib.decompress(block.payload)))
+        for block in read_sample_blocks(db, workout.id, (first_block, last_block)):
+            rows.extend(block)
         start = offset % BLOCK_SIZE
         rows = rows[start:start + stop - offset]
     if not include_fields:

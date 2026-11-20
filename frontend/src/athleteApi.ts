@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { ApiError, request } from './api'
 import type { Session } from './api'
@@ -150,11 +150,12 @@ export interface WorkoutList {
   has_more: boolean
 }
 
-export function useAthleteResource<T>(path: string, refetchInterval?: number) {
+export function useAthleteResource<T>(path: string, refetchInterval?: number, retainPrevious = false) {
   return useQuery({
     queryKey: ['athlete-data', path],
     queryFn: ({ signal }) => request<T>(path, { signal }),
     refetchInterval,
+    placeholderData: retainPrevious ? keepPreviousData : undefined,
   })
 }
 
@@ -196,4 +197,19 @@ export const numberLabel = (value: number) =>
 
 export function durationLabel(seconds: number | null) {
   return seconds === null ? 'Нет данных' : numberLabel(seconds / 60) + ' мин'
+}
+
+export const metricReasonLabels: Record<string, string> = {
+  channel_missing: 'В FIT нет записей этого датчика.',
+  zones_not_configured: 'Индивидуальные зоны не настроены для этого расчёта.',
+  timer_unresolved: 'По FIT не удалось определить участки с работающим таймером.',
+  no_active_samples: 'Нет показаний при работающем таймере.',
+  short_power_windows: 'Для NP нужно хотя бы одно полное окно длительностью 30 секунд.',
+  insufficient_power_coverage: 'В ряду мощности слишком много пропусков для расчёта NP.',
+  not_recorded: 'Значение отсутствует в FIT.',
+  rpe_missing: 'Спортсмен ещё не указал RPE.',
+  ftp_missing: 'В истории нет FTP, действовавшего на дату тренировки.',
+  timer_missing: 'В FIT отсутствует надёжное время таймера.',
+  speed_coverage_missing: 'В FIT нет времени движения и недостаточно показаний скорости.',
+  non_cycling_activity: 'NP рассчитан только для велотренировок.',
 }

@@ -119,7 +119,7 @@ export function WorkoutPage({ athleteId, readOnly = false, athleteName }: {
   const list = query.data
   return (
     <>
-      {readOnly && <Link className="back-link" to={'/athletes/' + athleteId}>К профилю спортсмена</Link>}
+      {readOnly && <Link className="back-link" to={'/athletes/' + athleteId}>К обзору спортсмена</Link>}
       <header className="page-heading"><div><h1>Тренировки</h1>{athleteName && <p>{athleteName}</p>}</div></header>
       {!readOnly && <UploadFit onUpload={() => setOffset(0)} />}
       <QueryFeedback loading={query.isPending} error={query.error} retry={() => void query.refetch()} />

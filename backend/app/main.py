@@ -10,9 +10,10 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from . import admin, athletes, auth, onelap_routes, wellness, workout_fit_routes, workouts
+from . import admin, analytics, athletes, auth, onelap_routes, wellness, workout_fit_routes, workout_series, workouts
 from .config import ROOT, Settings
 from .database import get_db, make_engine
+from .analytics_models import AppSetting
 from .athlete_models import Workout
 from .onelap_models import OnelapConnection
 from .onelap_provider import OnelapFitProvider
@@ -57,7 +58,7 @@ def create_app(
             engine.dispose()
 
     app = FastAPI(
-        title="Cycling Team Monitor", version="0.4.0",
+        title="Cycling Team Monitor", version="0.5.0",
         docs_url="/api/v1/docs", redoc_url=None, openapi_url="/api/v1/openapi.json",
         lifespan=lifespan,
     )
@@ -87,6 +88,7 @@ def create_app(
         try:
             db.execute(select(Workout.file_sha256).limit(1))
             db.execute(select(OnelapConnection.athlete_id).limit(1))
+            db.execute(select(AppSetting.key).limit(1))
         except SQLAlchemyError as exc:
             raise HTTPException(503, "database_unavailable") from exc
         return {"status": "ok"}
@@ -98,6 +100,8 @@ def create_app(
     app.include_router(workout_fit_routes.router, prefix="/api/v1")
     app.include_router(workouts.router, prefix="/api/v1")
     app.include_router(onelap_routes.router, prefix="/api/v1")
+    app.include_router(analytics.router, prefix="/api/v1")
+    app.include_router(workout_series.router, prefix="/api/v1")
 
     if settings.serve_frontend:
         dist = ROOT / "frontend" / "dist"

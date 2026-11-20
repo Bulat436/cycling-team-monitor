@@ -53,7 +53,7 @@ describe('вход и маршруты по роли', () => {
 
   it('показывает состав тренеру и передаёт CSRF при выходе', async () => {
     const fetch = vi.fn((url: string, options: RequestInit) => {
-      if (url.endsWith('/users') || url.endsWith('/wellness/team')) return json([])
+            if (url.startsWith('/api/v1/analytics/team?')) return json({ total: 0, active: 0, pending: 0, filled: 0, alerted: 0, groups: [], rows: [] })
       if (url.endsWith('/logout')) {
         expect(new Headers(options.headers).get('X-CSRF-Token')).toBe('csrf')
         return new Response(null, { status: 204 })

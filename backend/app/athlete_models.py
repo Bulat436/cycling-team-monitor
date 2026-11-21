@@ -74,6 +74,12 @@ class WellnessEntry(Recorded, Base):
     __table_args__ = tuple(
         CheckConstraint(f"{field} BETWEEN 1 AND 5", name=f"ck_wellness_{field}")
         for field in WELLNESS_SCORES
+    ) + (
+        CheckConstraint("sleep_minutes BETWEEN 0 AND 1440", name="ck_wellness_sleep_minutes"),
+        CheckConstraint("recovery BETWEEN 1 AND 5", name="ck_wellness_recovery"),
+        CheckConstraint(
+            "training_day_status IN ('rest', 'all_workouts_recorded')", name="ck_wellness_training_day_status",
+        ),
     )
 
     athlete_id: Mapped[int] = mapped_column(ForeignKey("athlete_profiles.athlete_id", ondelete="CASCADE"), primary_key=True)
@@ -87,6 +93,9 @@ class WellnessEntry(Recorded, Base):
     muscle_soreness: Mapped[int]
     illness_symptoms: Mapped[bool]
     comment: Mapped[str | None] = mapped_column(String(2000))
+    sleep_minutes: Mapped[int | None]
+    recovery: Mapped[int | None]
+    training_day_status: Mapped[str | None] = mapped_column(String(24))
 
 
 class Workout(Recorded, Base):

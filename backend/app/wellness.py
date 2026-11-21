@@ -43,16 +43,23 @@ def save_daily_entry(payload: WellnessValue, entry_date: date, scope: AthleteSco
     if auth.user.role != "athlete":
         raise HTTPException(403, "role_denied")
     timestamp = time()
+    today = local_date(profile.timezone, timestamp)
+    if payload.training_day_status is not None and entry_date >= today:
+        raise HTTPException(422, "training_day_not_completed")
     entry = db.get(WellnessEntry, (profile.athlete_id, entry_date))
     if entry is None:
-        if entry_date > local_date(profile.timezone, timestamp):
+        if entry_date > today:
             raise HTTPException(422, "future_diary_date")
         entry = WellnessEntry(
             athlete_id=profile.athlete_id, entry_date=entry_date,
             timezone=profile.timezone, created_at=timestamp,
         )
         db.add(entry)
-    for field, value in payload.model_dump().items():
+    values = payload.model_dump()
+    for optional in ("sleep_minutes", "recovery", "training_day_status"):
+        if optional not in payload.model_fields_set:
+            values.pop(optional)
+    for field, value in values.items():
         setattr(entry, field, value)
     entry.updated_at = timestamp
     db.commit()

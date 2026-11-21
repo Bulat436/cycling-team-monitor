@@ -1,4 +1,4 @@
-from sqlalchemy import JSON, ForeignKey, ForeignKeyConstraint, Index, LargeBinary, String
+from sqlalchemy import JSON, CheckConstraint, ForeignKey, ForeignKeyConstraint, Index, LargeBinary, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .athlete_models import Recorded
@@ -66,3 +66,19 @@ class WorkoutMetrics(Recorded, Base):
     snapshot: Mapped[dict] = mapped_column(JSON)
     result: Mapped[dict] = mapped_column(JSON)
     metadata_json: Mapped[dict] = mapped_column(JSON)
+
+
+class WorkoutEffort(Recorded, Base):
+    __tablename__ = "workout_efforts"
+    __table_args__ = (
+        CheckConstraint("start_seconds >= 0 AND duration_seconds > 0", name="ck_effort_interval"),
+        CheckConstraint("mean_watts >= 0", name="ck_effort_watts"),
+    )
+
+    workout_id: Mapped[int] = mapped_column(ForeignKey("workouts.id", ondelete="CASCADE"), primary_key=True)
+    protocol: Mapped[str] = mapped_column(String(64))
+    start_seconds: Mapped[int]
+    duration_seconds: Mapped[int]
+    file_sha256: Mapped[str] = mapped_column(String(64))
+    projection_version: Mapped[str] = mapped_column(String(32))
+    mean_watts: Mapped[float]

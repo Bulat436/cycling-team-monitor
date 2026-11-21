@@ -117,6 +117,9 @@ class WellnessValue(BaseModel):
     muscle_soreness: Score
     illness_symptoms: Annotated[bool, Field(strict=True)]
     comment: Comment | None = None
+    sleep_minutes: Annotated[int, Field(strict=True, ge=0, le=1440)] | None = None
+    recovery: Score | None = None
+    training_day_status: Literal["rest", "all_workouts_recorded"] | None = None
 
 
 class WellnessEntryView(WellnessValue):

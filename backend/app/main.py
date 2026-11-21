@@ -20,6 +20,7 @@ from .onelap_provider import OnelapFitProvider
 from .onelap_scheduler import OnelapScheduler, RequestGate
 from .onelap_secrets import SessionVault
 from .onelap_sync import OnelapSyncService
+from .training_intelligence import routes as training_intelligence
 from .workout_import import WorkoutImportService
 
 
@@ -103,6 +104,7 @@ def create_app(
     app.include_router(onelap_routes.router, prefix="/api/v1")
     app.include_router(analytics.router, prefix="/api/v1")
     app.include_router(workout_series.router, prefix="/api/v1")
+    app.include_router(training_intelligence.router, prefix="/api/v1")
 
     if settings.serve_frontend:
         dist = ROOT / "frontend" / "dist"

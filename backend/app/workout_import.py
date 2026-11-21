@@ -22,7 +22,7 @@ from .workout_metrics import PARAMETERS, VERSION, calculate
 from .workout_models import WorkoutFile, WorkoutImport, WorkoutMetrics, WorkoutSampleBlock, WorkoutSource
 
 BLOCK_SIZE = 512
-
+DUPLICATE_SECONDS = 5
 
 
 @dataclass(frozen=True)
@@ -52,6 +52,18 @@ def verify_actor(db: Session, actor: RequestActor):
         raise FitProblem("authentication_required", 401)
     if user.role != actor.role:
         raise FitProblem("role_denied", 403)
+
+
+def similar_workouts(workout: Workout, candidate: Workout) -> bool:
+    duration, other_duration = workout.timer_seconds, candidate.timer_seconds
+    if duration is None or other_duration is None or abs(duration - other_duration) > 10:
+        return False
+    distance = (workout.summary or {}).get("distance_m")
+    other_distance = (candidate.summary or {}).get("distance_m")
+    return (
+        distance is None or other_distance is None
+        or abs(distance - other_distance) <= max(100, distance * 0.02)
+    )
 
 
 class WorkoutImportService:
@@ -241,18 +253,9 @@ class WorkoutImportService:
     def _possible_duplicates(db, workout):
         rows = db.scalars(select(Workout).where(
             Workout.athlete_id == workout.athlete_id, Workout.id != workout.id,
-            Workout.started_at.between(workout.started_at - 5, workout.started_at + 5),
+            Workout.started_at.between(workout.started_at - DUPLICATE_SECONDS, workout.started_at + DUPLICATE_SECONDS),
         ).order_by(Workout.started_at, Workout.id).limit(100))
-        result = []
-        for candidate in rows:
-            duration, other_duration = workout.timer_seconds, candidate.timer_seconds
-            distance = workout.summary.get("distance_m")
-            other_distance = (candidate.summary or {}).get("distance_m")
-            similar_duration = duration is not None and other_duration is not None and abs(duration - other_duration) <= 10
-            similar_distance = distance is not None and other_distance is not None and abs(distance - other_distance) <= max(100, distance * 0.02)
-            if similar_duration and (similar_distance or distance is None or other_distance is None):
-                result.append(candidate.id)
-        return result
+        return [candidate.id for candidate in rows if similar_workouts(workout, candidate)]
 
     def reprocess(self, workout_id: int, actor: RequestActor, *, refresh_parameters: bool = False):
         if actor.role != "coach":

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from math import fsum
 
 from .fit_parser import Activity, CHANNELS, MAX_ACTIVITY_SECONDS, bounded, preferred
+from .training_intelligence.power import POWER_PROJECTION_VERSION, best_power
 
 VERSION = "fit-cycling-v1"
 WINDOW = 30
@@ -49,10 +50,10 @@ def _bounds(activity: Activity, elapsed: float | None) -> tuple[int, int] | None
     return (started, end) if end is not None and end > started else None
 
 
-def _timer_events(activity: Activity, bounds: tuple[int, int] | None, timer: float | None) -> list[tuple[int, int]]:
+def _timer_events(timer_events, bounds: tuple[int, int] | None, timer: float | None) -> list[tuple[int, int]]:
     starts = {"start", 0}
     stops = {"stop", "stop_all", "stop_disable", "stop_disable_all", 1, 4, 8, 9}
-    events = [event for event in activity.events if event["event_type"] in starts | stops]
+    events = [event for event in timer_events if event["event_type"] in starts | stops]
     main = [event for event in events if event["group"] in (0, None)]
     if main:
         events = main
@@ -98,8 +99,8 @@ def _recorded_ranges(samples, bounds: tuple[int, int]) -> list[tuple[int, int]]:
     return ranges
 
 
-def _active_ranges(activity: Activity, samples, bounds, timer: float | None) -> tuple[list[tuple[int, int]], str]:
-    ranges = _timer_events(activity, bounds, timer)
+def _active_ranges(timer_events, samples, bounds, timer: float | None) -> tuple[list[tuple[int, int]], str]:
+    ranges = _timer_events(timer_events, bounds, timer)
     seconds = sum(end - start for start, end in ranges)
     if ranges and seconds <= MAX_ACTIVITY_SECONDS and (timer is None or abs(seconds - timer) <= 2):
         return ranges, "timer_events"
@@ -118,7 +119,7 @@ def _active_ranges(activity: Activity, samples, bounds, timer: float | None) -> 
     return [], "timer_unresolved"
 
 
-def _unique_samples(samples: list[dict]) -> list[tuple[int, dict]]:
+def _unique_samples(samples) -> list[tuple[int, dict]]:
     merged: dict[int, dict] = {}
     for row in samples:
         timestamp = row["timestamp"]
@@ -143,9 +144,17 @@ def _active_samples(samples, ranges):
             length = min(upcoming, end) - timestamp
             if upcoming - timestamp > MAX_HOLD:
                 length = 1
-            yield row, length, timestamp != previous_end
+            yield timestamp, row, length, timestamp != previous_end
             previous_end = timestamp + length
             index += 1
+
+
+def stored_active_observations(samples, timer_events, started_at, elapsed, timer):
+    """Reconstruct active observations with the same timing rules as FIT import."""
+    rows = _unique_samples(samples)
+    bounds = (started_at, started_at + round(elapsed)) if elapsed is not None and elapsed > 0 else None
+    ranges, _ = _active_ranges(timer_events, rows, bounds, timer)
+    return _active_samples(rows, ranges)
 
 
 def _zone_summary(histogram: dict, zones: list[dict], expected: int, samples_present: bool) -> tuple[dict | None, str | None]:
@@ -201,7 +210,7 @@ def calculate(activity: Activity, snapshot: dict) -> Projection:
         timer = None
     bounds = _bounds(activity, elapsed)
     samples = _unique_samples(activity.samples)
-    ranges, timing_source = _active_ranges(activity, samples, bounds, timer)
+    ranges, timing_source = _active_ranges(activity.events, samples, bounds, timer)
     expected = sum(end - start for start, end in ranges)
     possible_windows = sum(max(0, end - start - WINDOW + 1) for start, end in ranges)
     available = {key: any(row[key] is not None for row in activity.samples) for key in CHANNELS}
@@ -211,7 +220,9 @@ def calculate(activity: Activity, snapshot: dict) -> Projection:
     window: deque[float] = deque()
     window_total = 0.0
     fourth_powers, window_count = 0.0, 0
-    for row, length, new_segment in _active_samples(samples, ranges):
+    sports = {row["sport"] for row in activity.sessions if row.get("sport") not in (None, "generic")}
+    observations = _active_samples(samples, ranges)
+    for _, row, length, new_segment in observations:
         for key, value in row.items():
             histograms[key][value] += length
         power = row.get("power")
@@ -234,7 +245,6 @@ def calculate(activity: Activity, snapshot: dict) -> Projection:
         if not available[key]:
             reasons[key] = "channel_missing"
     np = intensity = tss = None
-    sports = {row["sport"] for row in activity.sessions if row.get("sport") not in (None, "generic")}
     if sports and sports != {"cycling"}:
         reasons["np"] = "non_cycling_activity"
     elif not available["power"]:
@@ -323,6 +333,10 @@ def calculate(activity: Activity, snapshot: dict) -> Projection:
         summary=summary,
         metrics={
             "np": np, "if_value": intensity, "tss": tss, **zone_summaries,
+            "power_projection": {
+                "version": POWER_PROJECTION_VERSION,
+                "best_watts": best_power(_active_samples(samples, ranges), enabled=not sports or sports == {"cycling"}),
+            },
             "power_distribution": (
                 [{"minimum": start, "maximum": start + POWER_BIN_WATTS, "seconds": seconds}
                  for start, seconds in sorted(distribution.items())] if distribution else None

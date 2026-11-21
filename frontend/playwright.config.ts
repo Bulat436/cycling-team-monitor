@@ -18,9 +18,11 @@ function createTestDirectory() {
 }
 
 const directory = process.env.TEST_WORKER_INDEX === undefined ? createTestDirectory() : ''
+const pilot = process.env.CTM_E2E_G5 === '1'
 
 export default defineConfig({
   testDir: './e2e',
+  ...(pilot ? { testMatch: '**/training-pilot.spec.ts' } : { testIgnore: '**/training-pilot.spec.ts' }),
   workers: 1,
   use: { baseURL: origin },
   projects: [

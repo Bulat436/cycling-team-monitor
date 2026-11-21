@@ -17,14 +17,17 @@ sys.path.insert(0, str(BACKEND))
 
 from app.athlete_models import AthleteProfile, FtpRecord, HeartRateZoneProfile, PowerZoneProfile, WellnessEntry, Workout
 from app.athletes import local_date
+from app import wellness
 from app.cli import bootstrap_coach
 from app.config import Settings
 from app.database import make_engine
 from app import main as application
 from app.models import User, now
 from app.security import passwords
+from app.training_intelligence import routes as training_routes
 from app.workout_import import WorkoutImportService
 from fit_fixtures import cycling_fit
+from seed_training_pilot import AS_OF, seed_training_pilot
 
 
 def seed_stage_b(settings: Settings, password: str) -> None:
@@ -92,20 +95,26 @@ def seed_analytics(settings: Settings, password: str) -> None:
 def main() -> None:
     origin = os.environ["CTM_E2E_ORIGIN"]
     address = urlsplit(origin)
-    directory = os.environ["CTM_E2E_DIRECTORY"]
-    database = Path(directory) / "test.sqlite3"
-    os.environ["CTM_DATABASE_PATH"] = str(database)
-    command.upgrade(Config(BACKEND / "alembic.ini"), "head")
-    settings = Settings(
-        database_path=database, fit_path=database.parent / "fit", allowed_origins=[origin], serve_frontend=True, secure_cookies=False, onelap_gateway="", onelap_keys=[],
-    )
+    directory = Path(os.environ["CTM_E2E_DIRECTORY"])
     password = os.environ["CTM_E2E_PASSWORD"]
-    bootstrap_coach(settings, "coach@example.com", "Главный тренер", password)
-    seed_stage_b(settings, password)
-    seed_analytics(settings, password)
+    pilot = os.environ.get("CTM_E2E_G5") == "1"
+    if pilot:
+        settings = seed_training_pilot(directory / "pilot", password, origin).model_copy(update={"serve_frontend": True})
+        training_routes.time = wellness.time = AS_OF.timestamp
+    else:
+        database = directory / "test.sqlite3"
+        os.environ["CTM_DATABASE_PATH"] = str(database)
+        command.upgrade(Config(BACKEND / "alembic.ini"), "head")
+        settings = Settings(
+            database_path=database, fit_path=database.parent / "fit", allowed_origins=[origin], serve_frontend=True,
+            secure_cookies=False, onelap_gateway="", onelap_keys=[],
+        )
+        bootstrap_coach(settings, "coach@example.com", "Главный тренер", password)
+        seed_stage_b(settings, password)
+        seed_analytics(settings, password)
     if static_root := os.environ.get("CTM_E2E_STATIC_ROOT"):
         application.ROOT = Path(static_root)
-    uvicorn.run(application.create_app(settings), host=address.hostname, port=address.port)
+    uvicorn.run(application.create_app(settings, start_onelap_worker=not pilot), host=address.hostname, port=address.port)
 
 
 if __name__ == "__main__":

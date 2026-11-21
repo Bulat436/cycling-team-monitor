@@ -14,7 +14,11 @@ export function makeQueryClient() {
         }
       },
     }),
-    defaultOptions: { queries: { retry: false } },
+    defaultOptions: {
+      // The browser's online status cannot tell whether the same-origin server is reachable.
+      queries: { retry: false, networkMode: 'always', refetchOnReconnect: true },
+      mutations: { networkMode: 'always' },
+    },
   })
   return client
 }

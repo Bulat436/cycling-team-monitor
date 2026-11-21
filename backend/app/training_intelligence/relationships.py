@@ -8,7 +8,7 @@ from typing import Literal
 
 from ..analytics_schemas import DateRange
 from .load import DAY
-from .schemas import Correlation, LinkedReaction, LoadDay, LoadEpisode, Reaction, RecoveryDay, Rules
+from .schemas import Correlation, LinkedReaction, LoadDay, LoadEpisode, LoadExposure, Reaction, RecoveryDay, Rules
 
 MAX_LAG = 7
 CORRELATION_DAYS = 180
@@ -24,6 +24,7 @@ LIMITATIONS = [
 
 def normalization_dates(
     last_load: date, reactions: Sequence[LinkedReaction], recovery: Mapping[date, RecoveryDay],
+    required_days: int,
 ) -> list[date]:
     degraded = [reaction for reaction in reactions if reaction.workout_id is None]
     if not degraded:
@@ -35,19 +36,19 @@ def normalization_dates(
         day = last_load + offset * DAY
         if day <= after or day not in recovery:
             continue
-        statuses = [recovery[day].metrics[metric].deteriorated for metric in sorted(metrics)]
-        if any(value is True for value in statuses):
+        observations = [recovery[day].metrics[metric] for metric in sorted(metrics)]
+        if any(value.deteriorated for value in observations):
             normal.clear()
-        elif all(value is False for value in statuses):
+        elif all(value.within_baseline for value in observations):
             normal.append(day)
-            if len(normal) == 2:
+            if len(normal) == required_days:
                 return normal
     return []
 
 
 def episodes(
     elevated: Sequence[LoadDay], reactions: Sequence[Reaction], recovery: Mapping[date, RecoveryDay],
-    completed_through: date,
+    completed_through: date, normalization_min_days: int, exposures: Mapping[date, LoadExposure] | None = None,
 ) -> list[LoadEpisode]:
     blocks: list[list[LoadDay]] = []
     for day in elevated:
@@ -81,7 +82,8 @@ def episodes(
             period=DateRange(start=first, end=last), elevated_dates=[item.date for item in block],
             workout_ids=list(dict.fromkeys(workout_id for item in block for workout_id in item.workout_ids)),
             reaction_window_end=end, open=end > completed_through, reactions=linked,
-            normalization_dates=normalization_dates(last, linked, recovery),
+            exposures=[exposures[item.date] for item in block] if exposures is not None else [],
+            normalization_dates=normalization_dates(last, linked, recovery, normalization_min_days),
         ))
     return result
 

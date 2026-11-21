@@ -11,7 +11,6 @@ from .schemas import Coverage, DayStatus, LoadDay, LoadReferenceBlock, LoadWeek,
 DAY = timedelta(days=1)
 WEEK_DAYS = 7
 BASELINE_DAYS = 28
-MIN_BASELINE_WEEKS = 3
 
 
 def dates(start: date, end: date):
@@ -162,7 +161,7 @@ def week_load(days: Sequence[LoadDay], end: int, rules: Rules) -> LoadWeek:
             sums.append(measured)
             fully_confirmed &= sampled.confirmed_days == WEEK_DAYS
     comparable = fsum(day.tss for day in current if day.tss is not None) if usable else None
-    baseline = median(sums) if len(sums) >= MIN_BASELINE_WEEKS else None
+    baseline = median(sums) if len(sums) >= rules.weekly_min_baseline_blocks else None
     recorded = known_sum(day.recorded_tss for day in current)
     status: Status = "missing" if recorded is None and not observed.workouts else "insufficient"
     if baseline is not None:

@@ -9,10 +9,6 @@ from .load import DAY, percent
 from .power import POWER_PROJECTION_VERSION
 from .schemas import EffortPoint, EffortView, PerformanceChange, Reaction, Rules
 
-PERFORMANCE_WINDOW_DAYS = 90
-MIN_PREVIOUS_ATTEMPTS = 3
-
-
 def effort_view(workout: Workout, effort: WorkoutEffort) -> EffortView:
     current = effort.file_sha256 == workout.file_sha256 and effort.projection_version == POWER_PROJECTION_VERSION
     return EffortView(
@@ -23,10 +19,10 @@ def effort_view(workout: Workout, effort: WorkoutEffort) -> EffortView:
     )
 
 
-def comparable_history(attempts: Sequence[EffortPoint], before: date) -> list[EffortPoint]:
+def comparable_history(attempts: Sequence[EffortPoint], before: date, window_days: int) -> list[EffortPoint]:
     unique_days = {
         attempt.date: attempt for attempt in attempts
-        if before - PERFORMANCE_WINDOW_DAYS * DAY <= attempt.date < before
+        if before - window_days * DAY <= attempt.date < before
     }
     return list(unique_days.values())
 
@@ -34,7 +30,7 @@ def comparable_history(attempts: Sequence[EffortPoint], before: date) -> list[Ef
 def compare(attempt: EffortPoint, history: Sequence[EffortPoint], rules: Rules) -> EffortPoint:
     if attempt.mean_watts is None:
         return attempt
-    if len(history) < MIN_PREVIOUS_ATTEMPTS:
+    if len(history) < rules.performance_baseline_attempts:
         return attempt.model_copy(update={"status": "insufficient", "reason": "too_few_comparable_attempts"})
     baseline = median(point.mean_watts for point in history)
     delta = percent(attempt.mean_watts, baseline)
@@ -48,7 +44,7 @@ def compare(attempt: EffortPoint, history: Sequence[EffortPoint], rules: Rules) 
         "reason": None if delta is not None else "zero_power_baseline",
         "baseline_watts": baseline, "baseline_workout_ids": [point.workout_id for point in history],
         "delta_pct": delta, "rpe_observations": len(rpe),
-        "baseline_rpe": median(rpe) if len(rpe) >= MIN_PREVIOUS_ATTEMPTS else None,
+        "baseline_rpe": median(rpe) if len(rpe) >= rules.performance_baseline_attempts else None,
     })
 
 
@@ -66,29 +62,30 @@ def performance_trend(
         completed = [attempt for attempt in group if attempt.date <= completed_through]
         measured = [attempt for attempt in completed if attempt.mean_watts is not None]
         for attempt in group:
-            point = compare(attempt, comparable_history(measured, attempt.date), rules)
+            point = compare(attempt, comparable_history(measured, attempt.date, rules.performance_window_days), rules)
             points.append(point)
             if point.delta_pct is not None and attempt.date <= completed_through:
                 outcomes.append(Reaction(
                     date=point.date, metric=f"performance:{duration}:{protocol}", workout_id=point.workout_id,
                     value=point.mean_watts, baseline=point.baseline_watts,
-                    delta=point.mean_watts - point.baseline_watts,
+                    delta=point.mean_watts - point.baseline_watts, observations=len(point.baseline_workout_ids),
                 ))
-        latest = list({attempt.date: attempt for attempt in completed}.values())[-2:]
-        if (len(latest) != 2 or any(attempt.mean_watts is None for attempt in latest)
-                or (latest[1].date - latest[0].date).days > PERFORMANCE_WINDOW_DAYS):
+        latest = list({attempt.date: attempt for attempt in completed}.values())[-rules.performance_repeat_attempts:]
+        if (len(latest) != rules.performance_repeat_attempts or any(attempt.mean_watts is None for attempt in latest)
+                or (latest[-1].date - latest[0].date).days > rules.performance_window_days):
             continue
-        history = comparable_history(measured, latest[0].date)
-        first, second = (compare(attempt, history, rules) for attempt in latest)
-        if first.delta_pct is None or second.delta_pct is None:
+        history = comparable_history(measured, latest[0].date, rules.performance_window_days)
+        compared = [compare(attempt, history, rules) for attempt in latest]
+        changes_pct = [attempt.delta_pct for attempt in compared if attempt.delta_pct is not None]
+        if len(changes_pct) != len(latest):
             continue
         threshold = rules.performance_change_pct
-        decreased = max(first.delta_pct, second.delta_pct) <= -threshold
-        improved = min(first.delta_pct, second.delta_pct) >= threshold
+        decreased = max(changes_pct) <= -threshold
+        improved = min(changes_pct) >= threshold
         if decreased or improved:
             changes.append(PerformanceChange(
                 protocol=protocol, duration_seconds=duration, direction="decreased" if decreased else "improved",
-                threshold_pct=threshold, baseline_watts=first.baseline_watts,
-                baseline_workout_ids=first.baseline_workout_ids, workouts=[first, second],
+                threshold_pct=threshold, baseline_watts=compared[0].baseline_watts,
+                baseline_workout_ids=compared[0].baseline_workout_ids, baseline_attempts=history, workouts=compared,
             ))
     return sorted(points, key=lambda point: (point.date, point.workout_id)), changes, outcomes

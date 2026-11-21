@@ -18,6 +18,7 @@ class Rules(BaseModel):
     ctl_days: Annotated[int, Field(ge=7, le=90)] = 42
     load_baseline_min_days: Annotated[int, Field(ge=3, le=28)] = 14
     weekly_min_days: Annotated[int, Field(ge=5, le=7)] = 5
+    weekly_min_baseline_blocks: Annotated[int, Field(ge=3, le=4)] = 3
     high_load_pct: Annotated[float, Field(gt=0, le=500)] = 20
     intense_if: Annotated[float, Field(gt=0, le=3)] = 0.85
     intense_min_seconds: Annotated[int, Field(ge=1, le=86400)] = 1200
@@ -25,14 +26,34 @@ class Rules(BaseModel):
     recovery_min_observations: Annotated[int, Field(ge=3, le=90)] = 7
     recovery_score_delta: Annotated[float, Field(gt=0, le=4)] = 1
     recovery_sleep_delta_minutes: Annotated[int, Field(ge=1, le=1440)] = 45
+    recovery_min_groups: Annotated[int, Field(ge=2, le=6)] = 2
+    recovery_min_evaluated_days: Annotated[int, Field(ge=2, le=7)] = 4
+    recovery_min_worsened_days: Annotated[int, Field(ge=2, le=7)] = 2
+    recovery_normalization_days: Annotated[int, Field(ge=2, le=7)] = 2
     performance_change_pct: Annotated[float, Field(gt=0, le=100)] = 5
+    performance_baseline_attempts: Annotated[int, Field(ge=3, le=30)] = 3
+    performance_repeat_attempts: Annotated[int, Field(ge=2, le=7)] = 2
+    performance_window_days: Annotated[int, Field(ge=7, le=180)] = 90
     correlation_min_pairs: Annotated[int, Field(ge=30, le=180)] = 30
     correlation_min_half_abs: Annotated[float, Field(gt=0, le=1)] = 0.1
+    warning_high_worsened_days: Annotated[int, Field(ge=2, le=7)] = 3
+    warning_growth_pct: Annotated[float, Field(gt=0, le=500)] = 15
+    warning_growth_recent_days: Annotated[int, Field(ge=1, le=7)] = 3
+    warning_recent_days: Annotated[int, Field(ge=1, le=45)] = 14
+    warning_diary_window_days: Annotated[int, Field(ge=7, le=45)] = 14
+    warning_diary_min_entries: Annotated[int, Field(ge=1, le=45)] = 7
 
     @model_validator(mode="after")
     def check_windows(self):
         if self.atl_days >= self.ctl_days or self.recovery_min_observations > self.recovery_window_days:
             raise ValueError("Invalid smoothing periods or observation window")
+        if self.warning_diary_min_entries > self.warning_diary_window_days:
+            raise ValueError("Diary minimum exceeds the warning window")
+        if self.performance_baseline_attempts > self.performance_window_days:
+            raise ValueError("Performance minimum exceeds the comparison window")
+        if (self.recovery_min_worsened_days > self.recovery_min_evaluated_days
+                or self.warning_high_worsened_days < self.recovery_min_worsened_days):
+            raise ValueError("Invalid thresholds for repeated deterioration")
         return self
 
 
@@ -118,6 +139,7 @@ class RecoveryValue(BaseModel):
     delta: float | None
     status: Status
     deteriorated: bool | None
+    within_baseline: bool | None
 
 
 class RecoveryDay(BaseModel):
@@ -170,6 +192,7 @@ class PerformanceChange(BaseModel):
     threshold_pct: float
     baseline_watts: float
     baseline_workout_ids: list[int]
+    baseline_attempts: list[EffortPoint] = Field(default_factory=list)
     workouts: list[EffortPoint]
 
 
@@ -188,6 +211,7 @@ class Reaction(BaseModel):
     baseline: float
     delta: float
     workout_id: int | None = None
+    observations: int | None = None
 
 
 class LinkedReaction(Reaction):
@@ -197,6 +221,19 @@ class LinkedReaction(Reaction):
     same_date_only: bool
 
 
+class LoadExposure(BaseModel):
+    date: date
+    kind: Literal["daily", "weekly"]
+    period: DateRange
+    tss: float
+    baseline_tss: float
+    delta_tss: float
+    delta_pct: float
+    baseline_observations: int
+    coverage: Coverage
+    status: Status
+
+
 class LoadEpisode(BaseModel):
     period: DateRange
     elevated_dates: list[date]
@@ -204,6 +241,7 @@ class LoadEpisode(BaseModel):
     reaction_window_end: date
     open: bool
     reactions: list[LinkedReaction]
+    exposures: list[LoadExposure] = Field(default_factory=list)
     normalization_dates: list[date] = Field(default_factory=list)
 
 

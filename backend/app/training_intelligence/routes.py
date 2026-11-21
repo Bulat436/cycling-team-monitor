@@ -6,16 +6,18 @@ from fastapi import APIRouter, HTTPException
 from sqlalchemy.orm import Session
 
 from ..analytics_models import AppSetting
-from ..athlete_models import Workout
-from ..athletes import AthleteScope
-from ..security import DB, Coach, audit
+from ..athlete_models import AthleteProfile, Workout
+from ..athletes import AthleteScope, list_profiles
+from ..security import DB, Auth, Coach, audit
 from ..workout_metrics import stored_active_observations
 from ..workout_models import WorkoutEffort, WorkoutMetrics
 from ..workouts import WorkoutScope, read_sample_blocks
 from .performance import effort_view
 from .power import POWER_PROJECTION_VERSION, best_power, interval_power
 from .schemas import EffortValue, EffortView, Measurements, Rules
-from .service import SETTINGS_KEY, load_rules, measurements
+from .service import SETTINGS_KEY, load_rules, measurements, warning_measurements
+from .warning_schemas import AthleteWarnings, OwnRecovery, TeamWarningRow, TeamWarnings
+from .warnings import ATTENTION_ORDER, athlete_warnings
 
 router = APIRouter(tags=["Нагрузка и восстановление"])
 
@@ -23,6 +25,42 @@ router = APIRouter(tags=["Нагрузка и восстановление"])
 @router.get("/training-intelligence/athletes/{athlete_id}/measurements", response_model=Measurements)
 def athlete_measurements(scope: AthleteScope, db: DB, coach: Coach, period: Literal["7", "28", "42", "90"] = "28"):
     return measurements(db, scope[0], int(period), time(), load_rules(db))
+
+
+@router.get("/training-intelligence/athletes/{athlete_id}/warnings", response_model=AthleteWarnings)
+def warnings_for_athlete(scope: AthleteScope, db: DB, coach: Coach):
+    data = next(warning_measurements(db, [scope[0]], time(), load_rules(db)))
+    return athlete_warnings(data)
+
+
+@router.get("/training-intelligence/team", response_model=TeamWarnings)
+def team_warning_overview(db: DB, coach: Coach):
+    profiles = list_profiles(db)
+    members = {profile.athlete_id: (profile, user) for profile, user in profiles}
+    rows = []
+    for data in warning_measurements(db, [profile for profile, _ in profiles], time(), load_rules(db)):
+        profile, user = members[data.athlete_id]
+        rows.append(TeamWarningRow(
+            **athlete_warnings(data).model_dump(), name=user.name, group=profile.team_group, active=user.active,
+        ))
+    rows.sort(key=lambda row: (-ATTENTION_ORDER[row.max_attention], row.name.casefold(), row.athlete_id))
+    return TeamWarnings(athletes=rows)
+
+
+@router.get("/training-intelligence/me", response_model=OwnRecovery)
+def own_recovery(db: DB, auth: Auth):
+    if auth.user.role != "athlete":
+        raise HTTPException(403, "role_denied")
+    profile = db.get(AthleteProfile, auth.user.id)
+    if profile is None:
+        raise HTTPException(404, "athlete_missing")
+    data = next(warning_measurements(db, [profile], time(), load_rules(db)))
+    start = data.current_week.period.start
+    return OwnRecovery(
+        athlete_id=profile.athlete_id, timezone=profile.timezone, completed_through=data.completed_through,
+        load=data.current_week, recovery=[day for day in data.recovery if day.date >= start],
+        missing_diary_dates=[day for day in data.missing_diary_dates if day >= start],
+    )
 
 
 @router.get("/training-intelligence/settings", response_model=Rules)

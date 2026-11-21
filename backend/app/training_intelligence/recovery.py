@@ -42,22 +42,24 @@ def recovery_days(
                 value=value, baseline=baseline, observations=len(observed), delta=delta,
                 status="missing" if value is None else "insufficient" if baseline is None else "sufficient",
                 deteriorated=delta * direction >= threshold if delta is not None else None,
+                within_baseline=abs(delta) < threshold if delta is not None else None,
             )
         result.append(RecoveryDay(date=day, has_entry=day in entries, metrics=values))
     return result
 
 
-def recovery_pattern(days: Sequence[RecoveryDay]) -> RecoveryPattern:
+def recovery_pattern(days: Sequence[RecoveryDay], rules: Rules) -> RecoveryPattern:
     evaluated = []
     deterioration = []
     for day in days:
         known_groups = {METRICS[key][0] for key, value in day.metrics.items() if value.delta is not None}
-        if len(known_groups) >= 2:
+        if len(known_groups) >= rules.recovery_min_groups:
             evaluated.append(day.date)
         groups = {METRICS[key][0] for key, value in day.metrics.items() if value.deteriorated}
-        if len(groups) >= 2:
+        if len(groups) >= rules.recovery_min_groups:
             deterioration.append(day.date)
     return RecoveryPattern(
         evaluated_dates=evaluated, deterioration_dates=deterioration,
-        sustained=len(deterioration) >= 2 if len(evaluated) >= 4 else None,
+        sustained=len(deterioration) >= rules.recovery_min_worsened_days
+        if len(evaluated) >= rules.recovery_min_evaluated_days else None,
     )

@@ -98,9 +98,9 @@ def test_recovery_uses_prior_observations_and_independent_signal_groups():
     assert days[0].metrics["sleep_minutes"].delta == -50
     assert days[0].metrics["recovery"].status == "missing"
     assert days[2].metrics["sleep_minutes"].value is None and days[2].metrics["sleep_minutes"].delta is None
-    trend = recovery_pattern(days)
+    trend = recovery_pattern(days, Rules())
     assert trend.sustained is True and trend.deterioration_dates == [first, first + DAY]
-    assert recovery_pattern(days[:3]).sustained is None
+    assert recovery_pattern(days[:3], Rules()).sustained is None
 
 
 def effort(index, watts, *, protocol="erg-5min", duration=300, offset=None, rpe=None):
@@ -155,7 +155,7 @@ def test_episodes_merge_overlaps_and_each_reaction_uses_nearest_exposure():
         Reaction(date=day, metric="sleep_quality", value=2, baseline=4, delta=-2)
         for day in (START, START + DAY, START + 7 * DAY, START + 12 * DAY, START + 13 * DAY, START + 17 * DAY)
     ]
-    first, second = episodes([load[(day - START).days] for day in exposures], reactions + reactions, {}, START + 17 * DAY)
+    first, second = episodes([load[(day - START).days] for day in exposures], reactions + reactions, {}, START + 17 * DAY, 2)
     assert first.elevated_dates == exposures[:2] and first.workout_ids == [1, 2]
     assert [item.lag_days for item in first.reactions] == [0, 1, 2, 7]
     assert [item.lag_group for item in second.reactions] == ["0", "4-7"]
@@ -171,8 +171,12 @@ def test_episode_normalization_requires_two_observed_days():
                     exposure + 4 * DAY: {"sleep_quality": 4}})
     recovery = recovery_days(exposure, exposure + 4 * DAY, entries, Rules())
     reaction = Reaction(date=exposure + DAY, metric="sleep_quality", value=2, baseline=4, delta=-2)
-    result, = episodes(load[:1], [reaction], {point.date: point for point in recovery}, exposure + 4 * DAY)
+    result, = episodes(load[:1], [reaction], {point.date: point for point in recovery}, exposure + 4 * DAY, 2)
     assert result.normalization_dates == [exposure + 2 * DAY, exposure + 4 * DAY]
+    entries[exposure + 4 * DAY]["sleep_quality"] = 5
+    recovery = recovery_days(exposure, exposure + 4 * DAY, entries, Rules())
+    outside, = episodes(load[:1], [reaction], {point.date: point for point in recovery}, exposure + 4 * DAY, 2)
+    assert outside.normalization_dates == []
 
 
 def test_lag_correlation_does_not_calculate_on_small_samples_or_constant_series():

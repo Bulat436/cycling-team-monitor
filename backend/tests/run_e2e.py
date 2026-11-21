@@ -20,7 +20,7 @@ from app.athletes import local_date
 from app.cli import bootstrap_coach
 from app.config import Settings
 from app.database import make_engine
-from app.main import create_app
+from app import main as application
 from app.models import User, now
 from app.security import passwords
 from app.workout_import import WorkoutImportService
@@ -103,7 +103,9 @@ def main() -> None:
     bootstrap_coach(settings, "coach@example.com", "Главный тренер", password)
     seed_stage_b(settings, password)
     seed_analytics(settings, password)
-    uvicorn.run(create_app(settings), host=address.hostname, port=address.port)
+    if static_root := os.environ.get("CTM_E2E_STATIC_ROOT"):
+        application.ROOT = Path(static_root)
+    uvicorn.run(application.create_app(settings), host=address.hostname, port=address.port)
 
 
 if __name__ == "__main__":

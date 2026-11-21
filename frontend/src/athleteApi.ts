@@ -42,12 +42,16 @@ export const diaryFields = [
 ] as const
 
 export type WellnessScores = Record<typeof diaryFields[number]['name'], number>
+export type TrainingDayConfirmation = 'rest' | 'all_workouts_recorded'
 
 export interface WellnessEntry extends WellnessScores {
   entry_date: string
   timezone: string
   illness_symptoms: boolean
   comment: string | null
+  sleep_minutes?: number | null
+  recovery?: number | null
+  training_day_status?: TrainingDayConfirmation | null
   created_at: number
   updated_at: number
 }

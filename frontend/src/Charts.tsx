@@ -1,4 +1,4 @@
-import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ReferenceArea, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
 import { numberLabel } from './athleteApi'
 
@@ -9,10 +9,11 @@ const axis = '#445a72'
 const tooltipValue = (value: unknown) => typeof value === 'number' ? numberLabel(value) : 'Нет данных'
 
 export interface TrendPoint { x: number; value: number | null; baseline?: number | null }
+export interface ChartRange { start: number; end: number }
 
-export function TrendChart({ title, data, unit, ticks, step = false, baseline = false, domain }: {
+export function TrendChart({ title, data, unit, ticks, step = false, baseline = false, baselineLabel, valueLabel, domain, range }: {
   title: string; data: TrendPoint[]; unit: string; ticks: (value: number) => string; step?: boolean;
-  baseline?: boolean; domain?: [number, number]
+  baseline?: boolean; baselineLabel?: string; valueLabel?: string; domain?: [number, number]; range?: ChartRange
 }) {
   if (!data.some(point => point.value !== null || point.baseline != null)) return <p className="muted">Нет данных за выбранный период.</p>
   return (
@@ -25,10 +26,11 @@ export function TrendChart({ title, data, unit, ticks, step = false, baseline = 
           <YAxis domain={domain} width={60} unit={unit ? ' ' + unit : ''} tick={{ fill: axis, fontSize: 13 }} tickLine={false} axisLine={false} />
           <Tooltip labelFormatter={value => ticks(Number(value))} formatter={tooltipValue} />
           {baseline && <Legend />}
-          <Line dataKey="value" name={baseline ? 'Дневник' : title} stroke={blue} strokeWidth={2}
+          {range && <ReferenceArea x1={range.start} x2={range.end} fill={teal} fillOpacity={.18} stroke={teal} ifOverflow="hidden" />}
+          <Line dataKey="value" name={valueLabel ?? (baseline ? 'Дневник' : title)} stroke={blue} strokeWidth={2}
             type={step ? 'stepAfter' : 'linear'} connectNulls={false}
             dot={data.length < 400 ? { r: 2.5 } : false} isAnimationActive={false} />
-          {baseline && <Line dataKey="baseline" name="Среднее за предыдущие 28 дней" stroke={teal} strokeDasharray="5 5"
+          {baseline && <Line dataKey="baseline" name={baselineLabel ?? 'Среднее за предыдущие 28 дней'} stroke={teal} strokeDasharray="5 5"
             strokeWidth={2} connectNulls={false} dot={false} isAnimationActive={false} />}
         </LineChart>
       </ResponsiveContainer>

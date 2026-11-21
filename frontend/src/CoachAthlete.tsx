@@ -12,10 +12,12 @@ import { DiaryPage, ScoreDetails } from './Wellness'
 import { displayMeasure, WorkoutPage } from './Workouts'
 
 const Analytics = lazy(() => import('./CoachAnalytics'))
+const TrainingAthlete = lazy(() => import('./TrainingAthlete'))
 
 const tabs = [
   { path: '', name: 'Обзор' }, { path: 'diary', name: 'Дневник' },
   { path: 'workouts', name: 'Тренировки' }, { path: 'analytics', name: 'Аналитика' },
+  { path: 'load-recovery', name: 'Нагрузка и восстановление' },
   { path: 'training', name: 'FTP и зоны' }, { path: 'profile', name: 'Профиль' },
 ]
 
@@ -80,7 +82,7 @@ function Overview({ athlete }: { athlete: AthleteProfile }) {
   </>
 }
 
-export function CoachAthleteTab({ page }: { page: 'overview' | 'diary' | 'workouts' | 'analytics' | 'training' | 'profile' }) {
+export function CoachAthleteTab({ page }: { page: 'overview' | 'diary' | 'workouts' | 'analytics' | 'load-recovery' | 'training' | 'profile' }) {
   const athlete = useOutletContext<AthleteProfile>()
   const athleteId = athlete.athlete_id
   if (page === 'overview') return <Overview athlete={athlete} />
@@ -88,6 +90,9 @@ export function CoachAthleteTab({ page }: { page: 'overview' | 'diary' | 'workou
   if (page === 'workouts') return <WorkoutPage athleteId={athleteId} readOnly />
   if (page === 'analytics') {
     return <Suspense fallback={<p role="status">Загружаем графики…</p>}><Analytics athleteId={athleteId} /></Suspense>
+  }
+  if (page === 'load-recovery') {
+    return <Suspense fallback={<p role="status">Загружаем графики…</p>}><TrainingAthlete athleteId={athleteId} /></Suspense>
   }
   return <ProfilePage key={page} athleteId={athleteId} edit view={page} />
 }

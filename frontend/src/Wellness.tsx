@@ -1,10 +1,11 @@
 import { useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Link } from 'react-router'
+import { Link, useSearchParams } from 'react-router'
 
 import { dateLabel, diaryFields, recordedAt, useAthleteResource, useSaveAthleteData } from './athleteApi'
 import type { WellnessEntry, WellnessHistory } from './athleteApi'
 import { Pager, QueryFeedback, SaveFeedback } from './AthleteFeedback'
+import { dayLabels } from './trainingApi'
 
 const pageSize = 30
 
@@ -13,6 +14,9 @@ export function ScoreDetails({ entry, showTimes = false }: { entry: WellnessEntr
     <>
       <dl className="measurements wellness-values">
         {diaryFields.map(field => <div key={field.name}><dt>{field.label}</dt><dd>{entry[field.name]} из 5</dd></div>)}
+        {entry.sleep_minutes != null && <div><dt>Продолжительность сна</dt><dd>{entry.sleep_minutes} мин</dd></div>}
+        {entry.recovery != null && <div><dt>Самооценка восстановления</dt><dd>{entry.recovery} из 5</dd></div>}
+        {entry.training_day_status && <div><dt>Записи за день</dt><dd>{dayLabels[entry.training_day_status]}</dd></div>}
         <div><dt>Симптомы заболевания</dt><dd>{entry.illness_symptoms ? 'Да' : 'Нет'}</dd></div>
       </dl>
       {entry.comment && <p className="entry-comment">{entry.comment}</p>}
@@ -21,16 +25,25 @@ export function ScoreDetails({ entry, showTimes = false }: { entry: WellnessEntr
   )
 }
 
-function DiaryForm({ path, date, entry }: { path: string; date: string; entry: WellnessEntry | null }) {
+function DiaryForm({ path, date, entry, completed }: { path: string; date: string; entry: WellnessEntry | null; completed: boolean }) {
   const save = useSaveAthleteData()
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const data = new FormData(event.currentTarget)
     const values = Object.fromEntries(diaryFields.map(field => [field.name, Number(data.get(field.name))]))
+    const sleep = String(data.get('sleep_minutes') ?? '')
+    const recovery = String(data.get('recovery') ?? '')
+    const confirmation = data.get('training_day_status')
     save.mutate({
       path,
-      body: { ...values, illness_symptoms: data.get('illness_symptoms') === 'yes', comment: String(data.get('comment')).trim() || null },
+      body: {
+        ...values, illness_symptoms: data.get('illness_symptoms') === 'yes', comment: String(data.get('comment')).trim() || null,
+        ...(sleep || entry?.sleep_minutes != null ? { sleep_minutes: sleep ? Number(sleep) : null } : {}),
+        ...(recovery || entry?.recovery != null ? { recovery: recovery ? Number(recovery) : null } : {}),
+        ...(completed && (confirmation || entry?.training_day_status != null)
+          ? { training_day_status: confirmation || null } : {}),
+      },
     })
   }
 
@@ -60,6 +73,25 @@ function DiaryForm({ path, date, entry }: { path: string; date: string; entry: W
           </div>
         </fieldset>
       </div>
+      <div className="form-grid training-diary-fields">
+        <label>Продолжительность сна, мин (необязательно)
+          <input name="sleep_minutes" type="number" inputMode="numeric" min={0} max={1440} step={1} defaultValue={entry?.sleep_minutes ?? ''} />
+        </label>
+        <label>Самооценка восстановления (необязательно)
+          <select name="recovery" defaultValue={entry?.recovery ?? ''}>
+            <option value="">Без оценки</option>
+            <option value={1}>1 · очень низкое</option><option value={2}>2 · низкое</option>
+            <option value={3}>3 · среднее</option><option value={4}>4 · хорошее</option><option value={5}>5 · отличное</option>
+          </select>
+        </label>
+        {completed && <label>Подтверждение записей за день (необязательно)
+          <select name="training_day_status" defaultValue={entry?.training_day_status ?? ''}>
+            <option value="">День не подтверждён</option>
+            <option value="rest">День отдыха</option>
+            <option value="all_workouts_recorded">Все тренировки записаны</option>
+          </select>
+        </label>}
+      </div>
       <label>Комментарий (необязательно)<textarea name="comment" rows={3} maxLength={2000} defaultValue={entry?.comment ?? ''} /></label>
       {entry && <p className="muted entry-time">Создано {recordedAt(entry.created_at, entry.timezone)} · Изменено {recordedAt(entry.updated_at, entry.timezone)}</p>}
       <div className="actions"><button disabled={save.isPending}>{save.isPending ? 'Сохраняем…' : 'Сохранить дневник'}</button></div>
@@ -68,13 +100,13 @@ function DiaryForm({ path, date, entry }: { path: string; date: string; entry: W
   )
 }
 
-function SelectedDay({ base, date }: { base: string; date: string }) {
+function SelectedDay({ base, date, localDate }: { base: string; date: string; localDate: string }) {
   const path = base + '/' + date
   const day = useAthleteResource<WellnessEntry | null>(path)
   return (
     <>
       <QueryFeedback loading={day.isPending} error={day.error} retry={() => void day.refetch()} />
-      {day.data !== undefined && <DiaryForm key={date} path={path} date={date} entry={day.data} />}
+      {day.data !== undefined && <DiaryForm key={date} path={path} date={date} entry={day.data} completed={date < localDate} />}
     </>
   )
 }
@@ -83,11 +115,16 @@ export function DiaryPage({ athleteId, readOnly = false, athleteName }: {
   athleteId: number; readOnly?: boolean; athleteName?: string
 }) {
   const [offset, setOffset] = useState(0)
-  const [selected, setSelected] = useState('')
+  const [params, setParams] = useSearchParams()
   const dateInput = useRef<HTMLInputElement>(null)
   const base = '/athletes/' + athleteId + '/wellness'
   const diary = useAthleteResource<WellnessHistory>(base + '?offset=' + offset, 60_000)
   const history = diary.data
+  const targetDate = params.get('date') ?? ''
+  const targetTime = Date.parse(targetDate)
+  const validDate = /^\d{4}-\d{2}-\d{2}$/.test(targetDate)
+    && Number.isFinite(targetTime) && new Date(targetTime).toISOString().slice(0, 10) === targetDate
+  const selected = validDate ? targetDate : ''
   const date = selected || history?.local_date || ''
   return (
     <>
@@ -105,8 +142,9 @@ export function DiaryPage({ athleteId, readOnly = false, athleteName }: {
               history.today_entry && <ScoreDetails entry={history.today_entry} showTimes />
             ) : (
               <>
-                <label className="date-picker">Дата анкеты<input ref={dateInput} type="date" value={date} max={selected > history.local_date ? selected : history.local_date} onChange={event => setSelected(event.target.value)} /></label>
-                <SelectedDay base={base} date={date} />
+                <label className="date-picker">Дата анкеты<input ref={dateInput} type="date" value={date} max={selected > history.local_date ? selected : history.local_date}
+                  onChange={event => setParams(event.target.value ? { date: event.target.value } : {}, { replace: true })} /></label>
+                <SelectedDay base={base} date={date} localDate={history.local_date} />
               </>
             )}
           </section>
@@ -118,7 +156,7 @@ export function DiaryPage({ athleteId, readOnly = false, athleteName }: {
                 <summary>{dateLabel(entry.entry_date)}{entry.illness_symptoms && <span className="status pending">Есть симптомы</span>}</summary>
                 <ScoreDetails entry={entry} showTimes />
                 {!readOnly && <button className="secondary" type="button" onClick={() => {
-                  setSelected(entry.entry_date)
+                  setParams({ date: entry.entry_date }, { replace: true })
                   dateInput.current?.focus()
                 }}>Редактировать анкету</button>}
               </details>

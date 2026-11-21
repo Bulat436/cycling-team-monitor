@@ -53,6 +53,7 @@ it('использует дату спортсмена и отправляет �
   })
   const form = await screen.findByRole('form', { name: 'Утренняя анкета' })
   expect(screen.getByLabelText('Дата анкеты')).toHaveValue(day)
+  expect(within(form).queryByLabelText(/Подтверждение записей/u)).toBeNull()
   expect(within(form).getAllByText('1 — очень плохо, 5 — отлично')).toHaveLength(3)
   expect(within(form).getAllByText('1 — минимальная, 5 — очень высокая')).toHaveLength(3)
   for (const name of ['Качество сна', 'Общая усталость', 'Усталость ног', 'Мотивация', 'Настроение', 'Мышечная болезненность']) {
@@ -67,6 +68,51 @@ it('использует дату спортсмена и отправляет �
     sleep_quality: 4, general_fatigue: 4, leg_fatigue: 4, motivation: 4, mood: 4,
     muscle_soreness: 4, illness_symptoms: false, comment: 'Запись',
   })
+})
+
+it('сохраняет необязательные измерения и подтверждение дня и очищает их без подстановки нулей', async () => {
+  const oldDay = '2026-03-10'
+  let entry = {
+    sleep_quality: 4, general_fatigue: 3, leg_fatigue: 2, motivation: 4, mood: 4, muscle_soreness: 1,
+    illness_symptoms: false, comment: 'Старая запись', entry_date: oldDay, timezone: tz,
+    created_at: 1773100000, updated_at: 1773100000,
+  }
+  const save = vi.fn()
+  setup(<DiaryPage athleteId={17} />, (url, options) => {
+    if (url.endsWith('/wellness/' + oldDay)) {
+      if (options.method === 'PUT') {
+        const values = JSON.parse(String(options.body))
+        save(new Headers(options.headers).get('X-CSRF-Token'), values)
+        entry = { ...entry, ...values }
+      }
+      return entry
+    }
+    if (url.endsWith('/wellness/' + day)) return null
+    return { timezone: tz, local_date: day, today_entry: null, entries: [entry], has_more: false }
+  })
+  fireEvent.change(await screen.findByLabelText('Дата анкеты'), { target: { value: oldDay } })
+  const sleep = await screen.findByLabelText(/Продолжительность сна/u)
+  const recovery = screen.getByLabelText(/Самооценка восстановления/u)
+  const confirmation = screen.getByLabelText(/Подтверждение записей/u)
+  expect(sleep).toHaveValue(null)
+  expect(recovery).toHaveValue('')
+  expect(confirmation).toHaveValue('')
+  fireEvent.change(sleep, { target: { value: '430' } })
+  fireEvent.change(recovery, { target: { value: '4' } })
+  fireEvent.change(confirmation, { target: { value: 'rest' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Сохранить дневник' }))
+  expect(await screen.findByText('Изменения сохранены.')).toBeVisible()
+  expect(save).toHaveBeenNthCalledWith(1, 'fixture-csrf', expect.objectContaining({
+    sleep_minutes: 430, recovery: 4, training_day_status: 'rest', comment: 'Старая запись',
+  }))
+  fireEvent.change(sleep, { target: { value: '' } })
+  fireEvent.change(recovery, { target: { value: '' } })
+  fireEvent.change(confirmation, { target: { value: '' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Сохранить дневник' }))
+  await screen.findByText('Изменения сохранены.')
+  expect(save).toHaveBeenNthCalledWith(2, 'fixture-csrf', expect.objectContaining({
+    sleep_minutes: null, recovery: null, training_day_status: null,
+  }))
 })
 
 it('отправляет RPE 0 по идентификатору тренировки и снимает напоминание', async () => {

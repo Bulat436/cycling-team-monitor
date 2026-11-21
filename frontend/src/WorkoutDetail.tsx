@@ -118,7 +118,7 @@ function WorkoutDetails({ workout, coach }: { workout: WorkoutDetail; coach: boo
         {rpe && <p className="muted">Заполнено {recordedAt(rpe.created_at, workout.timezone)} · Изменено {recordedAt(rpe.updated_at, workout.timezone)}</p>}
         {!coach && <RpeForm workout={workout} />}
       </section>
-      {coach && <Suspense fallback={<p role="status">Загружаем графики…</p>}><WorkoutCharts workoutId={workout.id} /></Suspense>}
+      {coach && <Suspense fallback={<p role="status">Загружаем графики…</p>}><WorkoutCharts workout={workout} /></Suspense>}
       <ZoneSection title="Зоны мощности" value={result?.power_zones} reason={perMetric.power_zones} />
       <ZoneSection title="Зоны пульса" value={result?.heart_rate_zones} reason={perMetric.heart_rate_zones} />
       <section className="panel">

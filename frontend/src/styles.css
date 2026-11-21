@@ -281,7 +281,7 @@ textarea {
 .coach-alerts .status { white-space: normal; }
 .omitted-list li { color: var(--muted); font-size: .875rem; }
 .athlete-link { font-size: 1rem; }
-.athlete-card-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: .4rem 1.2rem; margin-bottom: .65rem; }
+.athlete-card-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: .4rem 1.2rem; margin-bottom: .65rem; overflow-wrap: anywhere; }
 .athlete-card-heading p { font-size: clamp(1.35rem, 2.5vw, 1.9rem); font-weight: 700; letter-spacing: -.025em; }
 .athlete-tabs { display: flex; gap: .35rem; flex-wrap: wrap; border-bottom: 1px solid var(--line); margin-bottom: 1.2rem; }
 .athlete-tabs a { display: inline-grid; min-height: 44px; align-items: center; padding: .35rem .78rem; border-bottom: 3px solid transparent; text-decoration: none; }
@@ -293,7 +293,7 @@ textarea {
 .analytics-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin-bottom: 1rem; }
 .analytics-stack .analytics-pair { margin-bottom: 0; }
 .chart-header { display: flex; justify-content: space-between; gap: .75rem; align-items: end; flex-wrap: wrap; }
-.chart-frame { width: 100%; min-width: 0; height: 17rem; }
+.chart-frame { width: 100%; min-width: 0; height: 17rem; overflow: hidden; }
 .chart-frame.horizontal-chart { overflow: auto; max-height: 23rem; height: auto; }
 .sensor-chart { min-width: 0; }
 .sensor-chart h3 { margin: .5rem .15rem; }
@@ -327,4 +327,55 @@ textarea {
   justify-content: center;
   gap: 0.5rem;
   padding: 0.75rem 1rem max(0.75rem, env(safe-area-inset-bottom));
+}
+
+.athlete-nav-short { display: none; }
+.training-team, .training-chart-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; min-width: 0; }
+.training-team { list-style: none; margin: 0; padding: 0; }
+.training-member { align-content: start; overflow-wrap: anywhere; }
+.training-member h2 { flex: 1 1 12rem; }
+.training-member .chart-header { align-items: start; }
+.training-member .measurements { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.training-member .measurements div:last-child { grid-column: 1 / -1; }
+.training-filters, .training-effort-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; }
+.training-filters select, .training-select select { min-width: 0; }
+.training-select { width: min(100%, 19rem); }
+.training-badge { white-space: normal; }
+.status.training-high { background: #fde5e8; color: #8b2335; }
+.training-tabs { margin-bottom: 0; }
+.training-warning { overflow-wrap: anywhere; scroll-margin-top: 1rem; }
+.training-warning > summary .status { margin-block: .15rem; }
+.training-warning-body, .training-subsection { display: grid; gap: .75rem; min-width: 0; overflow-wrap: anywhere; }
+.training-subsection { margin-top: .75rem; }
+.training-table { max-width: 100%; }
+.training-table table { min-width: 28rem; }
+.training-table tbody th { white-space: normal; }
+.training-table small { display: block; font-size: .8125rem; color: var(--muted); font-weight: 400; }
+.training-table small + small { margin-top: .25rem; }
+.training-list { margin: 0; padding-inline-start: 1.15rem; overflow-wrap: anywhere; }
+.training-list:empty { display: none; }
+.training-list li + li { margin-top: .3rem; }
+.training-timeline { list-style: none; border-inline-start: 2px solid var(--line); margin: 0; padding-inline-start: 1rem; }
+.training-timeline > li { position: relative; padding: .05rem 0 1rem; overflow-wrap: anywhere; }
+.training-timeline > li:last-child { padding-bottom: 0; }
+.training-timeline > li::before { content: ''; position: absolute; inset-inline-start: -1.3rem; top: .48rem; height: .45rem; width: .45rem; border-radius: 50%; background: var(--primary); }
+.training-timeline h3 { font-size: 1rem; margin-bottom: .4rem; }
+.training-effort-fields { padding: 0; border: 0; margin: 0; min-width: 0; }
+.training-effort-result { border-inline-start: 3px solid var(--primary); background: #eef4f9; padding: .65rem .85rem; border-radius: .3rem; }
+.training-effort-result p + p { margin-top: .3rem; }
+#control-effort { scroll-margin-top: 1rem; }
+
+@media (max-width: 850px) {
+  .training-team, .training-chart-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 760px) {
+  .athlete-workspace .sidebar nav { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .athlete-workspace .sidebar nav a { font-size: clamp(.75rem, 3vw, .94rem); overflow-wrap: anywhere; }
+  .athlete-nav-full { display: none; }
+  .athlete-nav-short { display: inline; }
+}
+@media (max-width: 560px) {
+  .training-filters, .training-effort-fields, .training-diary-fields { grid-template-columns: minmax(0, 1fr); }
+  .training-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .training-tabs a { padding-inline: .45rem; overflow-wrap: anywhere; font-size: .9rem; }
 }

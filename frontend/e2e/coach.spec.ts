@@ -20,7 +20,8 @@ test('тренер фильтрует команду, смотрит импор�
   await expect(page.getByText('Запусков пока нет.')).toBeVisible()
 
   const tabs = page.getByRole('navigation', { name: 'Вкладки спортсмена' })
-  await expect(tabs.getByRole('link')).toHaveCount(6)
+  await expect(tabs.getByRole('link')).toHaveCount(7)
+  await expect(tabs.getByRole('link', { name: 'Нагрузка и восстановление' })).toBeVisible()
   await tabs.getByRole('link', { name: 'Аналитика', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Недельная нагрузка' })).toBeVisible()
   await page.getByRole('button', { name: 'Свой период' }).click()

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Link, Navigate, NavLink, Outlet, Route, Routes } from 'react-router'
@@ -16,6 +16,10 @@ import { WorkoutPage } from './Workouts'
 import { WorkoutDetailRoute } from './WorkoutDetail'
 import { forgetSession, useSession } from './session'
 import { AcceptAccess, Brand, SignIn } from './SignIn'
+import { ownTrainingPath, trainingTeamPath } from './trainingApi'
+
+const TrainingTeam = lazy(() => import('./TrainingTeam'))
+const OwnTraining = lazy(() => import('./OwnTraining'))
 
 const athletePages = [
   { path: '/diary', label: 'Дневник' },
@@ -50,8 +54,16 @@ function Shell({ session }: { session: Session }) {
         <Link className="home-link" to="/"><Brand /></Link>
         <nav aria-label="Разделы">
           <NavLink to="/" end>{coach ? 'Команда' : 'Главная'}</NavLink>
-          {coach ? <NavLink to="/access">Управление доступом</NavLink> :
-            athletePages.map(page => <NavLink key={page.path} to={page.path}>{page.label}</NavLink>)}
+          {coach ? <>
+            <NavLink to={trainingTeamPath}>Нагрузка и восстановление</NavLink>
+            <NavLink to="/access">Управление доступом</NavLink>
+          </> : <>
+            {athletePages.map(page => <NavLink key={page.path} to={page.path}>{page.label}</NavLink>)}
+            <NavLink to={ownTrainingPath} aria-label="Моя нагрузка и восстановление">
+              <span className="athlete-nav-full" aria-hidden="true">Моя нагрузка и восстановление</span>
+              <span className="athlete-nav-short" aria-hidden="true">Нагрузка</span>
+            </NavLink>
+          </>}
         </nav>
         <div className="sidebar-account">
           <span>{session.user.name}</span>
@@ -110,6 +122,12 @@ export function App() {
         <Route index element={<Home />} />
         <Route path="/access" element={<ForRole role="coach"><AccessPage /></ForRole>} />
         <Route path="/access/audit" element={<ForRole role="coach"><Audit /></ForRole>} />
+        <Route path={trainingTeamPath} element={<ForRole role="coach">
+          <Suspense fallback={<p role="status">Загрузка…</p>}><TrainingTeam /></Suspense>
+        </ForRole>} />
+        <Route path={ownTrainingPath} element={<ForRole role="athlete">
+          <Suspense fallback={<p role="status">Загрузка…</p>}><OwnTraining /></Suspense>
+        </ForRole>} />
         <Route path="/diary" element={<ForRole role="athlete"><AthleteArea page="diary" /></ForRole>} />
         <Route path="/workouts" element={<ForRole role="athlete"><AthleteArea page="workouts" /></ForRole>} />
         <Route path="/workouts/:workoutId" element={<WorkoutDetailRoute />} />
@@ -120,6 +138,7 @@ export function App() {
           <Route path="diary" element={<CoachAthleteTab page="diary" />} />
           <Route path="workouts" element={<CoachAthleteTab page="workouts" />} />
           <Route path="analytics" element={<CoachAthleteTab page="analytics" />} />
+          <Route path="load-recovery" element={<CoachAthleteTab page="load-recovery" />} />
           <Route path="training" element={<CoachAthleteTab page="training" />} />
           <Route path="profile" element={<CoachAthleteTab page="profile" />} />
         </Route>

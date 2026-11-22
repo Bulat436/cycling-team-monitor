@@ -1,4 +1,4 @@
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from datetime import date
 from statistics import median
 
@@ -21,7 +21,9 @@ UNSUPPORTED = ["stress", "resting_heart_rate", "hrv"]
 
 def recovery_days(
     start: date, end: date, entries: Mapping[date, dict[str, int | None]], rules: Rules,
+    *, diary_dates: Collection[date] | None = None,
 ) -> list[RecoveryDay]:
+    filled_dates = entries if diary_dates is None else diary_dates
     result = []
     for day in dates(start, end):
         previous = [
@@ -44,7 +46,7 @@ def recovery_days(
                 deteriorated=delta * direction >= threshold if delta is not None else None,
                 within_baseline=abs(delta) < threshold if delta is not None else None,
             )
-        result.append(RecoveryDay(date=day, has_entry=day in entries, metrics=values))
+        result.append(RecoveryDay(date=day, has_entry=day in filled_dates, metrics=values))
     return result
 
 

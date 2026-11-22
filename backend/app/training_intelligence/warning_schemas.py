@@ -99,3 +99,4 @@ class OwnRecovery(BaseModel):
     load: LoadWeek
     recovery: list[RecoveryDay]
     missing_diary_dates: list[Date]
+    recovery_window_days: int

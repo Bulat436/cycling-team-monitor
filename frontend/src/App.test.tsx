@@ -65,4 +65,33 @@ describe('вход и маршруты по роли', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Выйти' }))
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Вход в команду' })).toBeVisible())
   })
+
+  it('после подтверждения удаляет деактивированный аккаунт от имени главного тренера', async () => {
+    let deleted = false
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    try {
+      open('/access', (url, options) => {
+        if (url.endsWith('/auth/me')) {
+          const session = info('coach')
+          return json({ ...session, user: { ...session.user, is_head_coach: true } })
+        }
+        if (url.endsWith('/admin/users/2') && options.method === 'DELETE') {
+          expect(new Headers(options.headers).get('X-CSRF-Token')).toBe('csrf')
+          deleted = true
+          return new Response(null, { status: 204 })
+        }
+        if (url.endsWith('/admin/users')) return json(deleted ? [] : [
+          { id: 2, email: 'archived@example.com', name: 'Деактивированный спортсмен', role: 'athlete',
+            active: false, activated_at: 1, password_pending: false },
+        ])
+        return json([])
+      })
+      fireEvent.click(await screen.findByRole('button', { name: 'Удалить аккаунт' }))
+      expect(confirm).toHaveBeenCalledOnce()
+      expect(await screen.findByText('Аккаунт удалён.')).toBeVisible()
+      await waitFor(() => expect(screen.queryByText('Деактивированный спортсмен')).toBeNull())
+    } finally {
+      confirm.mockRestore()
+    }
+  })
 })

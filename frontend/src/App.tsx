@@ -17,9 +17,13 @@ import { WorkoutDetailRoute } from './WorkoutDetail'
 import { forgetSession, useSession } from './session'
 import { AcceptAccess, Brand, SignIn } from './SignIn'
 import { ownTrainingPath, trainingTeamPath } from './trainingApi'
+import { sleepDiaryPath } from './sleepApi'
+import { confirmDiscard } from './unsaved'
+import type { FormOutlet } from './unsaved'
 
 const TrainingTeam = lazy(() => import('./TrainingTeam'))
 const OwnTraining = lazy(() => import('./OwnTraining'))
+const SleepDiary = lazy(() => import('./SleepDiary'))
 
 const athletePages = [
   { path: '/diary', label: 'Дневник' },
@@ -31,9 +35,11 @@ function Shell({ session }: { session: Session }) {
   const client = useQueryClient()
   const [exitError, setExitError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [unsaved, setUnsaved] = useState(false)
   const coach = session.user.role === 'coach'
 
   async function logout() {
+    if (unsaved && !confirmDiscard()) return
     setBusy(true)
     setExitError('')
     try {
@@ -72,7 +78,7 @@ function Shell({ session }: { session: Session }) {
           {exitError && <p role="alert" className="error">{exitError}</p>}
         </div>
       </aside>
-      <main className="content"><Outlet /></main>
+      <main className="content"><Outlet context={{ setUnsaved } satisfies FormOutlet} /></main>
     </div>
   )
 }
@@ -101,9 +107,10 @@ function Home() {
   return session.user.role === 'coach' ? <Team /> : <AthleteHome user={session.user} />
 }
 
-function AthleteArea({ page }: { page: 'diary' | 'workouts' | 'profile' }) {
+function AthleteArea({ page }: { page: 'diary' | 'sleep' | 'workouts' | 'profile' }) {
   const athleteId = useSession().data!.user.id
   if (page === 'diary') return <DiaryPage athleteId={athleteId} />
+  if (page === 'sleep') return <Suspense fallback={<p role="status">Загрузка…</p>}><SleepDiary athleteId={athleteId} /></Suspense>
   if (page === 'workouts') return <WorkoutPage athleteId={athleteId} />
   return <ProfilePage athleteId={athleteId} />
 }
@@ -129,6 +136,7 @@ export function App() {
           <Suspense fallback={<p role="status">Загрузка…</p>}><OwnTraining /></Suspense>
         </ForRole>} />
         <Route path="/diary" element={<ForRole role="athlete"><AthleteArea page="diary" /></ForRole>} />
+        <Route path={sleepDiaryPath} element={<ForRole role="athlete"><AthleteArea page="sleep" /></ForRole>} />
         <Route path="/workouts" element={<ForRole role="athlete"><AthleteArea page="workouts" /></ForRole>} />
         <Route path="/workouts/:workoutId" element={<WorkoutDetailRoute />} />
         <Route path="/profile" element={<ForRole role="athlete"><AthleteArea page="profile" /></ForRole>} />

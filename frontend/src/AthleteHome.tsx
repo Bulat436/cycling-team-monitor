@@ -5,6 +5,7 @@ import type { WellnessHistory, WorkoutList } from './athleteApi'
 import { QueryFeedback } from './AthleteFeedback'
 import { OnelapSummary } from './OnelapFit'
 import type { Identity } from './api'
+import { sleepDiaryPath } from './sleepApi'
 
 export function AthleteHome({ user }: { user: Identity }) {
   const base = '/athletes/' + user.id
@@ -23,6 +24,7 @@ export function AthleteHome({ user }: { user: Identity }) {
             <>
               <p className={'status ' + (wellness.data.today_entry ? 'active' : 'pending')}>{wellness.data.today_entry ? 'Сегодня заполнен' : 'Сегодня не заполнен'}</p>
               <Link className="button" to="/diary">{wellness.data.today_entry ? 'Открыть утренний дневник' : 'Заполнить утренний дневник'}</Link>
+              <Link to={sleepDiaryPath}>Сон и восстановление</Link>
             </>
           )}
         </section>

@@ -226,6 +226,39 @@ textarea {
 .notice { margin-bottom: 1rem; padding: .7rem .9rem; border: 1px solid #ead8b7; border-radius: .5rem; background: #fff0d5; color: #76450f; }
 .rpe-form { max-width: 34rem; }
 
+.sleep-heading { flex-wrap: wrap; margin-bottom: 0; }
+.sleep-date-panel { justify-items: start; }
+.sleep-date-panel input { width: min(100%, 15rem); }
+.sleep-summary small { display: block; color: var(--muted); }
+.sleep-body { display: grid; gap: .85rem; min-width: 0; margin: 0; padding: 0; border: 0; }
+.sleep-time-fields, .sleep-detail-fields { gap: .7rem; }
+.sleep-detail-fields { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.sleep-calculation { min-height: 1.5rem; }
+.sleep-choice { margin: 0; min-width: 0; background: #f7fafd; }
+.sleep-choice legend { padding-inline: .25rem; font-weight: 650; }
+.sleep-choice > button { justify-self: start; }
+.sleep-choices { display: grid; gap: .6rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr)); }
+.sleep-choices button { display: grid; justify-content: stretch; text-align: left; gap: .2rem; }
+.sleep-choices button[aria-pressed="true"] { color: white; background: var(--primary); }
+.sleep-history { margin: 0; padding: 0; list-style: none; }
+.sleep-history li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: .55rem; align-items: center; padding-block: .65rem; border-top: 1px solid var(--line); }
+.sleep-history li div { display: grid; overflow-wrap: anywhere; }
+.sleep-report-upload { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .75rem; align-items: end; }
+.sleep-report-upload input { width: 100%; min-width: 0; }
+.sleep-report-nights { list-style: none; padding: 0; }
+.sleep-report-nights li { border-top: 1px solid var(--line); padding-top: .65rem; }
+.sleep-report-nights h4 { margin: 0; }
+.sleep-report-preview-list { max-height: 26rem; overflow: auto; margin-bottom: .75rem; }
+
+@media (max-width: 560px) {
+  .sleep-report-upload { grid-template-columns: minmax(0, 1fr); }
+  .sleep-report-upload button { justify-self: start; }
+  .form-grid.sleep-detail-fields { grid-template-columns: minmax(0, 1fr); }
+  .sleep-history li { grid-template-columns: minmax(0, 1fr) auto; }
+  .sleep-history li div:nth-child(2) { grid-row: 2; }
+  .sleep-history li button { grid-column: 2; grid-row: 1 / span 2; }
+}
+
 @media (max-width: 760px) {
   .athlete-workspace .content { padding-bottom: calc(5.5rem + env(safe-area-inset-bottom)); }
   .athlete-workspace .sidebar nav {

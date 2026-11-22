@@ -166,7 +166,7 @@ export function useAthleteResource<T>(path: string, refetchInterval?: number, re
 export function useSaveAthleteData<T = unknown>() {
   const client = useQueryClient()
   return useMutation({
-    mutationFn: ({ path, method = 'PUT', body }: { path: string; method?: 'POST' | 'PUT'; body?: unknown }) => {
+    mutationFn: ({ path, method = 'PUT', body }: { path: string; method?: 'POST' | 'PUT' | 'PATCH'; body?: unknown }) => {
       const session = client.getQueryData<Session | null>(sessionKey)
       if (!session) throw new ApiError(401, 'authentication_required')
       return request<T>(path, { method, body, csrf: session.csrf_token })

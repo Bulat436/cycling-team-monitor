@@ -43,7 +43,19 @@ switch ($Action) {
     'start' {
         if (-not (Test-Path -LiteralPath $python -PathType Leaf)) { throw 'Run scripts/setup.ps1 first.' }
         $existing = Get-RunInfo
-        if ($existing -and (Get-Health $existing.port)) { throw 'The server is already running.' }
+        if ($existing -and (Get-Health $existing.port)) {
+            Write-Output "Already running at http://127.0.0.1:$($existing.port)."
+            return
+        }
+        Push-Location $backend
+        try {
+            & $python -m alembic current --check-heads
+            if ($LASTEXITCODE -ne 0) {
+                throw 'Database is not ready. Run .\scripts\migrate.ps1 from the project folder, then start again.'
+            }
+        } finally {
+            Pop-Location
+        }
         [void][IO.Directory]::CreateDirectory($runtime)
         $runId = [Guid]::NewGuid().ToString('N')
         $log = Join-Path $runtime "$runId.log"

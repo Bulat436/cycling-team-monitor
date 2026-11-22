@@ -26,7 +26,7 @@ def local_date(timezone: str, timestamp: float | None = None) -> date:
 def list_profiles(db: Session):
     return db.execute(
         select(AthleteProfile, User).join(User, User.id == AthleteProfile.athlete_id)
-        .where(User.role == "athlete").order_by(User.name, User.id)
+        .where(User.role == "athlete", User.deleted_at.is_(None)).order_by(User.name, User.id)
     ).all()
 
 

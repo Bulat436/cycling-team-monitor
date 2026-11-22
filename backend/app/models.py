@@ -1,6 +1,6 @@
 from time import time
 
-from sqlalchemy import CheckConstraint, ForeignKey, String
+from sqlalchemy import CheckConstraint, ForeignKey, String, false
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -28,6 +28,8 @@ class User(Timestamps, Base):
     password_hash: Mapped[str | None] = mapped_column(String(255))
     active: Mapped[bool] = mapped_column(default=True)
     activated_at: Mapped[int | None]
+    is_head_coach: Mapped[bool] = mapped_column(default=False, server_default=false())
+    deleted_at: Mapped[int | None]
 
     @property
     def password_pending(self) -> bool:

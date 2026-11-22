@@ -19,7 +19,7 @@ router = APIRouter(prefix="/admin", tags=["Управление доступом
 
 def get_account(db: Session, user_id: int) -> User:
     user = db.get(User, user_id)
-    if not user:
+    if not user or user.deleted_at is not None:
         raise HTTPException(404, "account_missing")
     return user
 
@@ -43,7 +43,7 @@ def issue_link(db: Session, user: User, coach: User, request: Request, kind: Act
 
 @router.get("/users", response_model=list[Account])
 def list_users(db: DB, coach: Coach):
-    return db.scalars(select(User).order_by(User.name, User.id)).all()
+    return db.scalars(select(User).where(User.deleted_at.is_(None)).order_by(User.name, User.id)).all()
 
 
 @router.get("/invitations", response_model=list[InvitationInfo])
@@ -87,7 +87,7 @@ def revoke_invitation(invitation_id: int, db: DB, coach: Coach):
 @router.post("/users/{user_id}/password-reset", status_code=201, response_model=AccessLink)
 def reset_password(user_id: int, request: Request, db: DB, coach: Coach):
     user = get_account(db, user_id)
-    if not user.active or user.activated_at is None or user.id == coach.id:
+    if not user.active or user.activated_at is None or user.id == coach.id or user.is_head_coach:
         raise HTTPException(409, "reset_unavailable")
     user.password_hash = None
     db.execute(delete(AuthSession).where(AuthSession.user_id == user.id))
@@ -99,6 +99,8 @@ def deactivate(user_id: int, db: DB, coach: Coach):
     user = get_account(db, user_id)
     if user.id == coach.id:
         raise HTTPException(409, "self_deactivation_denied")
+    if user.is_head_coach:
+        raise HTTPException(409, "head_coach_protected")
     if user.active:
         user.active = False
         connection = db.get(OnelapConnection, user.id)
@@ -108,6 +110,28 @@ def deactivate(user_id: int, db: DB, coach: Coach):
         db.execute(delete(AuthSession).where(AuthSession.user_id == user.id))
         audit(db, "account_deactivated", coach.id, user.id)
         db.commit()
+
+
+@router.delete("/users/{user_id}", status_code=204)
+def delete_account(user_id: int, db: DB, coach: Coach):
+    if not coach.is_head_coach:
+        raise HTTPException(403, "head_coach_required")
+    user = get_account(db, user_id)
+    if user.is_head_coach:
+        raise HTTPException(409, "head_coach_protected")
+    if user.active:
+        raise HTTPException(409, "account_still_active")
+
+    db.execute(delete(AuthSession).where(AuthSession.user_id == user.id))
+    db.execute(delete(Invitation).where(Invitation.user_id == user.id))
+    # Keep the user ID for archived training, audit events and invitations they issued.
+    user.deleted_at = now()
+    user.email = f"!deleted:{user.id}"
+    user.name = f"Удалённый аккаунт №{user.id}"
+    user.password_hash = None
+    user.activated_at = None
+    audit(db, "account_deleted", coach.id, user.id)
+    db.commit()
 
 
 @router.get("/audit", response_model=list[AuditEntry])

@@ -36,6 +36,7 @@ class Identity(BaseModel):
     email: str
     name: str
     role: Role
+    is_head_coach: bool
 
 
 class Account(Identity):

@@ -39,7 +39,7 @@ def bootstrap_coach(settings: Settings, email: str, name: str, password: str) ->
                 raise ValueError("Первый тренер уже создан.")
             user = User(
                 email=email, name=name, role="coach",
-                password_hash=passwords.hash(password), activated_at=now(),
+                password_hash=passwords.hash(password), activated_at=now(), is_head_coach=True,
             )
             db.add(user)
             db.flush()

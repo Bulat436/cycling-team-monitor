@@ -13,6 +13,7 @@ import { displayMeasure, WorkoutPage } from './Workouts'
 
 const Analytics = lazy(() => import('./CoachAnalytics'))
 const TrainingAthlete = lazy(() => import('./TrainingAthlete'))
+const CoachSleep = lazy(() => import('./CoachSleep'))
 
 const tabs = [
   { path: '', name: 'Обзор' }, { path: 'diary', name: 'Дневник' },
@@ -77,6 +78,9 @@ function Overview({ athlete }: { athlete: AthleteProfile }) {
             : <p className="muted">Тренировок пока нет.</p>}
         </section>
       </div>
+      <Suspense fallback={<p role="status">Загружаем сведения о сне…</p>}>
+        <CoachSleep athleteId={athleteId} today={row.today} />
+      </Suspense>
     </>}
     <OnelapSection athleteId={athleteId} timezone={athlete.timezone} coach />
   </>

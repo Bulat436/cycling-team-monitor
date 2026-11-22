@@ -52,7 +52,10 @@ export function ManageAccess({ session }: { session: Session }) {
       const result = await action()
       if (result) setLink(result)
       setNotice(message)
-      await client.invalidateQueries({ queryKey: ['admin'] })
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ['admin'] }),
+        client.invalidateQueries({ queryKey: ['athlete-data'] }),
+      ])
       return true
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) forgetSession(client)
@@ -61,6 +64,14 @@ export function ManageAccess({ session }: { session: Session }) {
     } finally {
       setBusy(false)
     }
+  }
+
+  function deleteAccount(account: Account) {
+    const message = `Удалить аккаунт «${account.name}»? Доступ по этому аккаунту будет закрыт безвозвратно.`
+    if (!window.confirm(account.role === 'athlete' ? message + ' Дневник и тренировки останутся в архиве.' : message)) return
+    void run(() => request<void>('/admin/users/' + account.id, {
+      method: 'DELETE', csrf: session.csrf_token,
+    }), 'Аккаунт удалён.')
   }
 
   async function invite(event: FormEvent<HTMLFormElement>) {
@@ -128,14 +139,19 @@ export function ManageAccess({ session }: { session: Session }) {
               const status = accountStatus(account)
               return (
                 <article className="account" key={account.id}>
-                  <div><h3>{account.name}{account.id === session.user.id && ' (вы)'}</h3><p>{account.email} · {roleNames[account.role]}</p></div>
+                  <div><h3>{account.name}{account.id === session.user.id && ' (вы)'}</h3>
+                    <p>{account.email} · {account.is_head_coach ? 'Главный тренер' : roleNames[account.role]}</p></div>
                   <span className={'status ' + status.tone}>{status.label}</span>
-                  {account.active && account.id !== session.user.id && <div className="actions">
+                  {account.active && !account.is_head_coach && account.id !== session.user.id && <div className="actions">
                     {account.activated_at === null ?
                       <button disabled={busy} className="secondary" onClick={() => accountAction(account, 'invitation')}>Новое приглашение</button> :
                       <button disabled={busy} className="secondary" onClick={() => accountAction(account, 'password-reset')}>Сбросить пароль</button>}
                     <button disabled={busy} className="secondary danger" onClick={() => accountAction(account, 'deactivate')}>Деактивировать</button>
                   </div>}
+                  {!account.active && !account.is_head_coach && session.user.is_head_coach &&
+                    <button type="button" disabled={busy} className="secondary danger" onClick={() => deleteAccount(account)}>
+                      Удалить аккаунт
+                    </button>}
                 </article>
               )
             })}
@@ -184,6 +200,7 @@ const auditActions: Record<string, string> = {
   password_reset_issued: 'Запрошен сброс пароля',
   access_accepted: 'Установлен пароль',
   account_deactivated: 'Учётная запись деактивирована',
+  account_deleted: 'Учётная запись удалена',
   login: 'Вход',
   logout: 'Выход',
 }

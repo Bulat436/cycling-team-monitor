@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date
@@ -11,6 +11,8 @@ from ..analytics_models import AppSetting
 from ..analytics_schemas import DateRange, FtpPoint
 from ..athlete_models import AthleteProfile, RpeEntry, WellnessEntry, Workout
 from ..athletes import local_date
+from ..sleep import resolve_sleep_day, sleep_ratings
+from ..sleep_models import SleepDay
 from ..workout_import import DUPLICATE_SECONDS, similar_workouts
 from ..workout_models import WorkoutEffort, WorkoutMetrics
 from ..workouts import rpe_view
@@ -82,20 +84,26 @@ def read_inputs(db: Session, profiles: Sequence[AthleteProfile], period_days: in
         window = windows[workout.athlete_id]
         if window.lower - DUPLICATE_SECONDS <= workout.started_at < window.upper:
             records[workout.athlete_id].append(row)
+    earliest = min(window.history_start for window in windows.values())
+    latest = max(window.period.end for window in windows.values())
     diary = defaultdict(list)
     for entry in db.scalars(select(WellnessEntry).where(
         WellnessEntry.athlete_id.in_(list(windows)),
-        WellnessEntry.entry_date.between(
-            min(window.history_start for window in windows.values()),
-            max(window.period.end for window in windows.values()),
-        ),
+        WellnessEntry.entry_date.between(earliest, latest),
     )):
         window = windows[entry.athlete_id]
         if window.history_start <= entry.entry_date <= window.period.end:
             diary[entry.athlete_id].append(entry)
+    sleep = defaultdict(dict)
+    for entry in db.scalars(select(SleepDay).where(
+        SleepDay.athlete_id.in_(list(windows)), SleepDay.sleep_date.between(earliest, latest),
+    )):
+        window = windows[entry.athlete_id]
+        if window.history_start <= entry.sleep_date <= window.period.end:
+            sleep[entry.athlete_id][entry.sleep_date] = entry
     for profile in profiles:
         athlete_id = profile.athlete_id
-        yield profile, windows[athlete_id], records[athlete_id], diary[athlete_id]
+        yield profile, windows[athlete_id], records[athlete_id], diary[athlete_id], sleep[athlete_id]
 
 
 def sources(profile: AthleteProfile, lower: int, rows, rules: Rules) -> tuple[list[WorkoutLoad], list[EffortPoint]]:
@@ -146,26 +154,35 @@ def sources(profile: AthleteProfile, lower: int, rows, rules: Rules) -> tuple[li
 def measurements(
     db: Session, profile: AthleteProfile, period_days: int, timestamp: float, rules: Rules,
 ) -> Measurements:
-    _, window, rows, diary = next(read_inputs(db, [profile], period_days, timestamp, rules))
-    return calculate_measurements(profile, window, rows, diary, rules, ftp_points(db, profile.athlete_id, window.period))
+    _, window, rows, diary, sleep = next(read_inputs(db, [profile], period_days, timestamp, rules))
+    return calculate_measurements(
+        profile, window, rows, diary, rules, ftp_points(db, profile.athlete_id, window.period), sleep=sleep,
+    )
 
 
-def warning_measurements(db: Session, profiles: Sequence[AthleteProfile], timestamp: float, rules: Rules):
-    days = max(2 * WEEK_DAYS, rules.warning_recent_days + MAX_LAG, rules.warning_diary_window_days) + 1
-    for profile, window, rows, diary in read_inputs(db, profiles, days, timestamp, rules):
-        yield calculate_measurements(profile, window, rows, diary, rules, [], for_warnings=True)
+def warning_measurements(db: Session, profiles: Sequence[AthleteProfile], timestamp: float, rules: Rules, *, minimum_days: int = 0):
+    days = max(minimum_days, max(2 * WEEK_DAYS, rules.warning_recent_days + MAX_LAG, rules.warning_diary_window_days) + 1)
+    for profile, window, rows, diary, sleep in read_inputs(db, profiles, days, timestamp, rules):
+        yield calculate_measurements(profile, window, rows, diary, rules, [], sleep=sleep, for_warnings=True)
 
 
 def calculate_measurements(
     profile: AthleteProfile, window: Window, rows, diary: Sequence[WellnessEntry], rules: Rules, ftp: list[FtpPoint],
-    *, for_warnings: bool = False,
+    *, sleep: Mapping[date, SleepDay] | None = None, for_warnings: bool = False,
 ) -> Measurements:
     period = window.period
     today = period.end
     completed = today - DAY
     analysis_start = window.analysis_start
     workouts, efforts = sources(profile, window.lower, rows, rules)
-    entries = {entry.entry_date: {metric: getattr(entry, metric) for metric in METRICS} for entry in diary}
+    diary_by_date = {entry.entry_date: entry for entry in diary}
+    entries = {day: {metric: getattr(entry, metric) for metric in METRICS} for day, entry in diary_by_date.items()}
+    for day, record in (sleep or {}).items():
+        entry = diary_by_date.get(day)
+        quality, recovery_score = sleep_ratings(record, entry)
+        entries.setdefault(day, {}).update(
+            sleep_minutes=resolve_sleep_day(record, entry).minutes, sleep_quality=quality, recovery=recovery_score,
+        )
     confirmations = {entry.entry_date: entry.training_day_status for entry in diary if entry.training_day_status}
     load = daily_load(window.history_start, today, workouts, confirmations, rules)
     by_index = {day.date: index for index, day in enumerate(load)}
@@ -174,7 +191,7 @@ def calculate_measurements(
         week_load(load, index, rules)
         for index in range(by_index[completed], by_index[period.start] - 1, -WEEK_DAYS)
     ]
-    recovery = recovery_days(analysis_start, today, entries, rules)
+    recovery = recovery_days(analysis_start, today, entries, rules, diary_dates=diary_by_date)
     prior_recovery = {day.date: day for day in recovery if day.date <= completed}
     recent = [day for day in prior_recovery.values() if day.date > completed - WEEK_DAYS * DAY]
     points, changes, outcomes = performance_trend(efforts, completed, rules)

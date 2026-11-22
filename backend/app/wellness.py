@@ -9,6 +9,7 @@ from .athlete_models import WellnessEntry
 from .athlete_schemas import TeamWellness, WellnessEntryView, WellnessHistory, WellnessValue
 from .athletes import AthleteScope, list_profiles, local_date, profile_summary
 from .security import DB, Auth, Coach
+from .sleep import sync_legacy_write
 
 router = APIRouter(tags=["Утренний дневник"])
 
@@ -47,18 +48,19 @@ def save_daily_entry(payload: WellnessValue, entry_date: date, scope: AthleteSco
     if payload.training_day_status is not None and entry_date >= today:
         raise HTTPException(422, "training_day_not_completed")
     entry = db.get(WellnessEntry, (profile.athlete_id, entry_date))
+    if entry is None and entry_date > today:
+        raise HTTPException(422, "future_diary_date")
+    sleep_minutes, recovery = sync_legacy_write(db, profile, entry_date, entry, payload, timestamp)
     if entry is None:
-        if entry_date > today:
-            raise HTTPException(422, "future_diary_date")
         entry = WellnessEntry(
             athlete_id=profile.athlete_id, entry_date=entry_date,
             timezone=profile.timezone, created_at=timestamp,
         )
         db.add(entry)
     values = payload.model_dump()
-    for optional in ("sleep_minutes", "recovery", "training_day_status"):
-        if optional not in payload.model_fields_set:
-            values.pop(optional)
+    values.update(sleep_minutes=sleep_minutes, recovery=recovery)
+    if "training_day_status" not in payload.model_fields_set:
+        values.pop("training_day_status")
     for field, value in values.items():
         setattr(entry, field, value)
     entry.updated_at = timestamp

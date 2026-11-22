@@ -210,7 +210,7 @@ export interface Measurements {
   timezone: string
   period: DateRange
   completed_through: string
-  rules: { atl_days: number; ctl_days: number }
+  rules: { atl_days: number; ctl_days: number; recovery_window_days?: number }
   current_week: LoadWeek
   load: LoadDay[]
   workouts: WorkoutLoad[]
@@ -304,4 +304,5 @@ export interface OwnRecovery {
   load: LoadWeek
   recovery: RecoveryDay[]
   missing_diary_dates: string[]
+  recovery_window_days?: number
 }

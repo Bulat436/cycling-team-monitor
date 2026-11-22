@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from . import admin, analytics, athletes, auth, onelap_routes, wellness, workout_fit_routes, workout_series, workouts
+from . import admin, analytics, athletes, auth, onelap_routes, sleep_report_routes, sleep_routes, wellness, workout_fit_routes, workout_series, workouts
 from .config import ROOT, Settings
 from .database import get_db, make_engine
 from .analytics_models import AppSetting
@@ -99,6 +99,8 @@ def create_app(
     app.include_router(admin.router, prefix="/api/v1")
     app.include_router(athletes.router, prefix="/api/v1")
     app.include_router(wellness.router, prefix="/api/v1")
+    app.include_router(sleep_routes.router, prefix="/api/v1")
+    app.include_router(sleep_report_routes.router, prefix="/api/v1")
     app.include_router(workout_fit_routes.router, prefix="/api/v1")
     app.include_router(workouts.router, prefix="/api/v1")
     app.include_router(onelap_routes.router, prefix="/api/v1")

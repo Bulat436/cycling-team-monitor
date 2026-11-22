@@ -50,6 +50,14 @@ def check_database(db: sqlite3.Connection) -> str:
     return migration
 
 
+def require_team_database(db: sqlite3.Connection) -> None:
+    has_table = db.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='garmin_personal_connection'"
+    ).fetchone()
+    if has_table and db.execute("SELECT 1 FROM garmin_personal_connection LIMIT 1").fetchone():
+        raise ValueError("Персональная база Garmin не входит в командный архив")
+
+
 def clear_live_access(db: sqlite3.Connection) -> None:
     db.execute("PRAGMA secure_delete=ON")
     with db:
@@ -105,6 +113,7 @@ def create_backup(settings: Settings, target: Path) -> None:
         working = Path(work)
         snapshot = working / DATABASE
         with closing(open_readonly(settings.database_file)) as original, closing(sqlite3.connect(snapshot)) as db:
+            require_team_database(original)
             original.backup(db, pages=256)
             clear_live_access(db)
             migration = check_database(db)
@@ -165,6 +174,7 @@ def unpack_verified(archive_path: Path, working: Path, *, restore: bool) -> None
         with closing(open_readonly(db_path)) as db:
             if check_database(db) != metadata.get("migration"):
                 raise ValueError("Версия схемы SQLite не соответствует описи")
+            require_team_database(db)
             if db.execute("SELECT 1 FROM auth_sessions LIMIT 1").fetchone() or db.execute(
                 "SELECT 1 FROM onelap_connections WHERE secret IS NOT NULL LIMIT 1"
             ).fetchone():

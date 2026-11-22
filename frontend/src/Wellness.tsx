@@ -1,11 +1,14 @@
 import { useRef, useState } from 'react'
 import type { FormEvent } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { Link, useSearchParams } from 'react-router'
 
 import { dateLabel, diaryFields, recordedAt, useAthleteResource, useSaveAthleteData } from './athleteApi'
 import type { WellnessEntry, WellnessHistory } from './athleteApi'
 import { Pager, QueryFeedback, SaveFeedback } from './AthleteFeedback'
 import { dayLabels } from './trainingApi'
+import { sleepApi, sleepDiaryPath } from './sleepApi'
+import type { SleepDay } from './sleepApi'
 
 const pageSize = 30
 
@@ -25,8 +28,11 @@ export function ScoreDetails({ entry, showTimes = false }: { entry: WellnessEntr
   )
 }
 
-function DiaryForm({ path, date, entry, completed }: { path: string; date: string; entry: WellnessEntry | null; completed: boolean }) {
+function DiaryForm({ path, date, entry, completed, sleep }: {
+  path: string; date: string; entry: WellnessEntry | null; completed: boolean; sleep?: SleepDay
+}) {
   const save = useSaveAthleteData()
+  const savedRecovery = entry ? entry.recovery : sleep?.recovery
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -40,7 +46,7 @@ function DiaryForm({ path, date, entry, completed }: { path: string; date: strin
       body: {
         ...values, illness_symptoms: data.get('illness_symptoms') === 'yes', comment: String(data.get('comment')).trim() || null,
         ...(sleep || entry?.sleep_minutes != null ? { sleep_minutes: sleep ? Number(sleep) : null } : {}),
-        ...(recovery || entry?.recovery != null ? { recovery: recovery ? Number(recovery) : null } : {}),
+        ...(recovery || savedRecovery != null ? { recovery: recovery ? Number(recovery) : null } : {}),
         ...(completed && (confirmation || entry?.training_day_status != null)
           ? { training_day_status: confirmation || null } : {}),
       },
@@ -58,7 +64,9 @@ function DiaryForm({ path, date, entry, completed }: { path: string; date: strin
             <div className="choices">
               {[1, 2, 3, 4, 5].map(value => (
                 <label className="choice" key={value}>
-                  <input type="radio" name={field.name} value={value} required defaultChecked={entry?.[field.name] === value} />
+                  <input type="radio" name={field.name} value={value} required defaultChecked={
+                    (entry ? entry[field.name] : field.name === 'sleep_quality' ? sleep?.sleep_quality : null) === value
+                  } />
                   <span>{value}</span>
                 </label>
               ))}
@@ -78,7 +86,7 @@ function DiaryForm({ path, date, entry, completed }: { path: string; date: strin
           <input name="sleep_minutes" type="number" inputMode="numeric" min={0} max={1440} step={1} defaultValue={entry?.sleep_minutes ?? ''} />
         </label>
         <label>Самооценка восстановления (необязательно)
-          <select name="recovery" defaultValue={entry?.recovery ?? ''}>
+          <select name="recovery" defaultValue={savedRecovery ?? ''}>
             <option value="">Без оценки</option>
             <option value={1}>1 · очень низкое</option><option value={2}>2 · низкое</option>
             <option value={3}>3 · среднее</option><option value={4}>4 · хорошее</option><option value={5}>5 · отличное</option>
@@ -100,13 +108,14 @@ function DiaryForm({ path, date, entry, completed }: { path: string; date: strin
   )
 }
 
-function SelectedDay({ base, date, localDate }: { base: string; date: string; localDate: string }) {
+function SelectedDay({ athleteId, base, date, localDate }: { athleteId: number; base: string; date: string; localDate: string }) {
   const path = base + '/' + date
   const day = useAthleteResource<WellnessEntry | null>(path)
+  const sleep = useQueryClient().getQueryData<SleepDay>(['athlete-data', `${sleepApi(athleteId)}/${date}`])
   return (
     <>
       <QueryFeedback loading={day.isPending} error={day.error} retry={() => void day.refetch()} />
-      {day.data !== undefined && <DiaryForm key={date} path={path} date={date} entry={day.data} completed={date < localDate} />}
+      {day.data !== undefined && <DiaryForm key={date} path={path} date={date} entry={day.data} completed={date < localDate} sleep={sleep} />}
     </>
   )
 }
@@ -129,7 +138,9 @@ export function DiaryPage({ athleteId, readOnly = false, athleteName }: {
   return (
     <>
       {readOnly && <Link className="back-link" to={'/athletes/' + athleteId}>К обзору спортсмена</Link>}
-      <header className="page-heading"><div><h1>Утренний дневник</h1>{athleteName && <p>{athleteName}</p>}</div></header>
+      <header className="page-heading"><div><h1>Утренний дневник</h1>{athleteName && <p>{athleteName}</p>}</div>
+        {!readOnly && <Link className="button secondary" to={sleepDiaryPath + (date ? `?date=${date}` : '')}>Сон и восстановление</Link>}
+      </header>
       <QueryFeedback loading={diary.isPending} error={diary.error} retry={() => void diary.refetch()} />
       {history && (
         <>
@@ -144,7 +155,7 @@ export function DiaryPage({ athleteId, readOnly = false, athleteName }: {
               <>
                 <label className="date-picker">Дата анкеты<input ref={dateInput} type="date" value={date} max={selected > history.local_date ? selected : history.local_date}
                   onChange={event => setParams(event.target.value ? { date: event.target.value } : {}, { replace: true })} /></label>
-                <SelectedDay base={base} date={date} localDate={history.local_date} />
+                <SelectedDay athleteId={athleteId} base={base} date={date} localDate={history.local_date} />
               </>
             )}
           </section>

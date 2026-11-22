@@ -345,7 +345,7 @@ def test_g5_upgrade_from_0005_preserves_actual_fit_and_old_metrics(migration):
     path, config = migration
     settings = Settings(_env_file=None, database_path=path, fit_path=path.parent / "fit")
     config.attributes["settings"] = settings
-    command.upgrade(config, "0005_coach")
+    command.upgrade(config, "head")
     day = pilot_day(0)
     activity = cycling_fit(start=workout_time(day), power=200)
     with closing(sqlite3.connect(path)) as db, db:
@@ -359,6 +359,8 @@ def test_g5_upgrade_from_0005_preserves_actual_fit_and_old_metrics(migration):
         result = WorkoutImportService(engine, settings).import_fit(1, activity, filename="legacy-synthetic.fit")
     finally:
         engine.dispose()
+    # Prepare the legacy database without running current ORM models against an old schema.
+    command.downgrade(config, "0005_coach")
     queries = (
         "SELECT id,started_at,timer_seconds,file_sha256,summary FROM workouts",
         "SELECT workout_id,snapshot,result FROM workout_metrics",

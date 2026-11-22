@@ -46,7 +46,7 @@ def test_migrations_create_wal_and_round_trip(migration):
     command.check(config)
     with sqlite3.connect(path) as db:
         assert db.execute("PRAGMA journal_mode").fetchone() == ("wal",)
-        assert db.execute("SELECT version_num FROM alembic_version").fetchone() == ("0006_training_intelligence",)
+        assert db.execute("SELECT version_num FROM alembic_version").fetchone() == ("0010_private_sleep_reports",)
     command.downgrade(config, "base")
     with sqlite3.connect(path) as db:
         assert db.execute("SELECT name FROM sqlite_master WHERE name = 'users'").fetchone() is None
@@ -59,6 +59,63 @@ def test_health_registration_and_bootstrap(client, password):
     assert post(client, "/auth/register", {}).status_code == 404
     with pytest.raises(ValueError, match="уже создан"):
         bootstrap_coach(client.app.state.settings, "other@example.com", "Тренер", password)
+
+
+def test_head_coach_removes_only_inactive_accounts_and_keeps_archive(client, password):
+    head = login(client, password).json()
+    assert head["user"]["is_head_coach"] is True
+    csrf = head["csrf_token"]
+    coach_email = "assistant-coach@example.com"
+    coach_link = invite(client, csrf, email=coach_email, role="coach")
+    with TestClient(client.app, base_url=ORIGIN) as assistant:
+        assert accept(assistant, coach_link["token"], password).status_code == 204
+        colleague = login(assistant, password, coach_email).json()
+        assert colleague["user"]["is_head_coach"] is False
+        colleague_csrf = colleague["csrf_token"]
+        head_path = f"/admin/users/{head['user']['id']}"
+        assert post(assistant, head_path + "/deactivate", csrf=colleague_csrf).status_code == 409
+        assert post(assistant, head_path + "/password-reset", csrf=colleague_csrf).status_code == 409
+        athlete_link = invite(assistant, colleague_csrf)
+        accounts = client.get("/api/v1/admin/users").json()
+        athlete_id = next(item["id"] for item in accounts if item["email"] == ATHLETE_EMAIL)
+        athlete = f"/admin/users/{athlete_id}"
+
+        def remove(api, path, token):
+            return api.delete("/api/v1" + path, headers={"Origin": ORIGIN, "X-CSRF-Token": token})
+
+        assert remove(client, athlete, csrf).status_code == 409
+        assert post(client, athlete + "/deactivate", csrf=csrf).status_code == 204
+        assert remove(assistant, athlete, colleague_csrf).status_code == 403
+        assert remove(client, athlete, "incorrect").status_code == 403
+        assert remove(client, athlete, csrf).status_code == 204
+        assert remove(client, athlete, csrf).status_code == 404
+        assert accept(assistant, athlete_link["token"], password).status_code == 400
+        assert all(item["id"] != athlete_id for item in client.get("/api/v1/admin/users").json())
+        assert all(item["athlete_id"] != athlete_id for item in client.get("/api/v1/athletes").json())
+        assert client.get(f"/api/v1/athletes/{athlete_id}").status_code == 200
+        assert any(event["action"] == "account_deleted" and event["target_id"] == athlete_id
+                   for event in client.get("/api/v1/admin/audit").json())
+
+        replacement = invite(assistant, colleague_csrf)
+        coach_path = f"/admin/users/{colleague['user']['id']}"
+        assert post(client, coach_path + "/deactivate", csrf=csrf).status_code == 204
+        assert remove(client, coach_path, csrf).status_code == 204
+        assert accept(assistant, replacement["token"], password).status_code == 204
+
+
+def test_head_coach_migration_prefers_bootstrapped_coach(migration):
+    path, config = migration
+    command.upgrade(config, "0006_training_intelligence")
+    with sqlite3.connect(path) as db:
+        db.execute("""INSERT INTO users (id, email, name, role, active, activated_at, created_at, updated_at)
+                      VALUES (1, 'other@example.com', 'Other', 'coach', 1, 1, 1, 1),
+                             (2, 'head@example.com', 'Head', 'coach', 1, 1, 1, 1)""")
+        db.execute("""INSERT INTO audit_logs (target_id, action, created_at, updated_at)
+                      VALUES (2, 'coach_bootstrapped', 1, 1)""")
+    command.upgrade(config, "head")
+    command.check(config)
+    with sqlite3.connect(path) as db:
+        assert db.execute("SELECT id, is_head_coach FROM users ORDER BY id").fetchall() == [(1, 0), (2, 1)]
 
 
 def test_session_cookie_csrf_logout_and_secret_storage(client, password):

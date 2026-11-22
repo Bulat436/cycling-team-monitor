@@ -12,6 +12,7 @@ from ..security import DB, Auth, Coach, audit
 from ..workout_metrics import stored_active_observations
 from ..workout_models import WorkoutEffort, WorkoutMetrics
 from ..workouts import WorkoutScope, read_sample_blocks
+from .load import DAY
 from .performance import effort_view
 from .power import POWER_PROJECTION_VERSION, best_power, interval_power
 from .schemas import EffortValue, EffortView, Measurements, Rules
@@ -48,18 +49,20 @@ def team_warning_overview(db: DB, coach: Coach):
 
 
 @router.get("/training-intelligence/me", response_model=OwnRecovery)
-def own_recovery(db: DB, auth: Auth):
+def own_recovery(db: DB, auth: Auth, period: Literal["28"] | None = None):
     if auth.user.role != "athlete":
         raise HTTPException(403, "role_denied")
     profile = db.get(AthleteProfile, auth.user.id)
     if profile is None:
         raise HTTPException(404, "athlete_missing")
-    data = next(warning_measurements(db, [profile], time(), load_rules(db)))
-    start = data.current_week.period.start
+    rules = load_rules(db)
+    data = next(warning_measurements(db, [profile], time(), rules, minimum_days=int(period or 0)))
+    start = data.period.end - (int(period) - 1) * DAY if period else data.current_week.period.start
     return OwnRecovery(
         athlete_id=profile.athlete_id, timezone=profile.timezone, completed_through=data.completed_through,
         load=data.current_week, recovery=[day for day in data.recovery if day.date >= start],
         missing_diary_dates=[day for day in data.missing_diary_dates if day >= start],
+        recovery_window_days=rules.recovery_window_days,
     )
 
 

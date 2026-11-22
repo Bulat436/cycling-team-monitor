@@ -2,7 +2,7 @@
 
 import os
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from time import time
 from urllib.parse import urlsplit
@@ -40,6 +40,10 @@ def seed_stage_b(settings: Settings, password: str) -> None:
                 email="profiles-coach@example.com", name="Тренер профилей",
                 role="coach", password_hash=password_hash, activated_at=now(),
             ))
+            db.add(User(
+                email="sleep-coach@example.com", name="Тренер дневника сна",
+                role="coach", password_hash=password_hash, activated_at=now(),
+            ))
             for project in ("windows-desktop", "android-viewport", "iphone-viewport", "coach-review"):
                 athlete = User(
                     email=f"{project}@example.com", name=f"Спортсмен {project}",
@@ -60,6 +64,22 @@ def seed_stage_b(settings: Settings, password: str) -> None:
                         sleep_quality=4, general_fatigue=2, leg_fatigue=2, motivation=5, mood=4,
                         muscle_soreness=1, illness_symptoms=False,
                     ))
+            for label in ("windows-desktop", "android-viewport", "iphone-viewport", "coach-review"):
+                athlete = User(
+                    email=f"sleep-{label}@example.com", name=f"Сон {label}", role="athlete",
+                    password_hash=password_hash, activated_at=now(),
+                )
+                db.add(athlete)
+                db.flush()
+                profile = AthleteProfile(athlete_id=athlete.id)
+                db.add(profile)
+                db.flush()
+                today = local_date(profile.timezone)
+                db.add_all(WellnessEntry(
+                    athlete_id=athlete.id, entry_date=today - timedelta(days=days), timezone=profile.timezone,
+                    sleep_quality=4, general_fatigue=2, leg_fatigue=2, motivation=5, mood=4,
+                    muscle_soreness=1, illness_symptoms=False, sleep_minutes=minutes,
+                ) for days, minutes in [(1, 420), (10, 0), *((index, 450) for index in range(2, 9))])
             db.commit()
     finally:
         engine.dispose()

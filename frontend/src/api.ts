@@ -5,6 +5,7 @@ export interface Identity {
   email: string
   name: string
   role: Role
+  is_head_coach?: boolean
 }
 
 export interface Account extends Identity {
@@ -58,6 +59,10 @@ const messages: Record<string, string> = {
   invitation_inactive: 'Эта ссылка уже недействительна.',
   reset_unavailable: 'Для этой учётной записи нельзя сбросить пароль.',
   self_deactivation_denied: 'Нельзя деактивировать собственную учётную запись.',
+  head_coach_required: 'Удалять аккаунты может только главный тренер.',
+  head_coach_protected: 'Аккаунт главного тренера защищён.',
+  account_still_active: 'Сначала деактивируйте аккаунт.',
+  account_missing: 'Аккаунт недоступен.',
   validation_error: 'Проверьте введённые данные.',
   athlete_missing: 'Профиль спортсмена недоступен.',
   workout_missing: 'Тренировка недоступна.',
@@ -98,18 +103,44 @@ const messages: Record<string, string> = {
   future_weight_date: 'Дата измерения массы не может быть в будущем.',
   measurement_missing: 'Измерение массы недоступно.',
   future_diary_date: 'Анкету можно заполнить за сегодня или за прошедшую дату.',
+  future_sleep_date: 'Выберите сегодняшнюю или прошедшую дату пробуждения.',
+  sleep_version_conflict: 'Запись изменилась на сервере. Сверьте данные перед повторным сохранением.',
+  sleep_source_unavailable: 'Этот вариант длительности больше недоступен. Обновите запись.',
+  sleep_date_occupied: 'На выбранную дату уже есть запись сна или утренняя анкета.',
+  sleep_date_invalid: 'Выберите другую дату, не позднее сегодняшней.',
+  sleep_manual_unavailable: 'Для переноса нужна ручная запись сна.',
+  sleep_window_invalid: 'Проверьте время сна. Интервал должен составлять от 0 до 24 часов.',
+  sleep_time_ambiguous: 'В это время часы переводились. Выберите смещение относительно UTC.',
+  sleep_time_nonexistent: 'Такого местного времени нет из-за перевода часов. Укажите другое время.',
+  sleep_offset_invalid: 'Смещение не соответствует дате и местному времени.',
+  sleep_offset_without_time: 'Чтобы указать смещение, заполните время.',
+  sleep_report_content_type: 'Выберите отчёт в формате JSON.',
+  sleep_report_too_large: 'Размер отчёта превышает 512 КиБ.',
+  sleep_report_invalid: 'Проверьте JSON-файл, версию формата и число ночей (от 1 до 366).',
+  sleep_report_night_invalid: 'Проверьте дату, время и показатели этой ночи.',
+  sleep_report_duplicate_date: 'В отчёте есть несколько ночей за одну дату.',
+  diary_sleep_quality_required: 'Укажите качество сна. Это обязательное поле сохранённой анкеты.',
   training_day_not_completed: 'Подтвердить отдых или полноту записей можно после завершения дня.',
   invalid_heart_rate_bounds: 'Границы пульсовых зон должны быть в диапазоне 0–300 уд/мин.',
 }
 
 export class ApiError extends Error {
-  constructor(public status: number, code: string) {
+  readonly code: string
+  readonly field?: string
+  readonly offsets: number[]
+
+  constructor(public status: number, detail: unknown) {
+    const fields = detail && typeof detail === 'object' ? detail as Record<string, unknown> : {}
+    const code = typeof detail === 'string' ? detail : typeof fields.code === 'string' ? fields.code : ''
     super(messages[code] ?? 'Не удалось выполнить действие. Повторите попытку позже.')
+    this.code = code
+    this.field = typeof fields.field === 'string' ? fields.field : undefined
+    this.offsets = Array.isArray(fields.offset_minutes) ? fields.offset_minutes.filter(value => Number.isInteger(value)) : []
   }
 }
 
 interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PUT'
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
   body?: unknown
   csrf?: string
   signal?: AbortSignal
@@ -118,9 +149,12 @@ interface RequestOptions {
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const headers = new Headers()
   const file = options.body instanceof File ? options.body : null
+  const blob = options.body instanceof Blob ? options.body : null
   if (file) {
     headers.set('Content-Type', 'application/octet-stream')
     headers.set('X-FIT-Filename', encodeURIComponent(file.name))
+  } else if (blob) {
+    headers.set('Content-Type', blob.type)
   } else if (options.body !== undefined) {
     headers.set('Content-Type', 'application/json')
   }
@@ -128,7 +162,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   const response = await fetch('/api/v1' + path, {
     method: options.method ?? 'GET',
     headers,
-    body: file ?? (options.body === undefined ? undefined : JSON.stringify(options.body)),
+    body: blob ?? (options.body === undefined ? undefined : JSON.stringify(options.body)),
     signal: options.signal,
     credentials: 'same-origin',
   })

@@ -58,8 +58,9 @@ function UploadFit({ onUpload }: { onUpload: () => void }) {
 
   const result = upload.data
   return (
-    <section className="panel">
+    <section className="panel" id="workout-fit-import">
       <h2>Импорт тренировки</h2>
+      <p><Link to="/diary/sleep#sleep-report-title">Загрузить тренировки из JSON или CSV</Link></p>
       <form className="fit-upload" onSubmit={submit}>
         <label>Файл тренировки (.fit)<input required type="file" accept=".fit" name="file" /></label>
         <button disabled={upload.isPending}>{upload.isPending ? 'Обрабатываем FIT…' : 'Загрузить FIT'}</button>

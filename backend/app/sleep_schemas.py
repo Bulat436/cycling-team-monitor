@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from .athlete_schemas import Score
 
-TeamSleepSource = Literal["manual", "legacy"]
+TeamSleepSource = Literal["manual", "legacy", "automatic"]
 Minutes = Annotated[int, Field(strict=True, ge=0, le=1440)]
 Offset = Annotated[int, Field(strict=True, ge=-840, le=840)]
 LocalTime = Annotated[str, StringConstraints(pattern=r"^(?:[01][0-9]|2[0-3]):[0-5][0-9]$")]
@@ -61,6 +61,7 @@ class SleepView(BaseModel):
     sleep_quality: int | None
     recovery: int | None
     has_diary: bool
+    has_report: bool = False
 
 
 class SleepHistory(BaseModel):

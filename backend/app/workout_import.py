@@ -20,6 +20,7 @@ from .models import AuthSession, User, now
 from .security import RequestActor, audit
 from .workout_metrics import PARAMETERS, VERSION, calculate
 from .workout_models import WorkoutFile, WorkoutImport, WorkoutMetrics, WorkoutSampleBlock, WorkoutSource
+from .workout_report import report_workout_key
 
 BLOCK_SIZE = 512
 DUPLICATE_SECONDS = 5
@@ -209,6 +210,12 @@ class WorkoutImportService:
 
             known_id = matching.workout_id if matching else origin.workout_id if origin else None
             workout = db.get(Workout, known_id) if known_id is not None else None
+            if workout is None and (reported := db.get(WorkoutSource, (
+                athlete_id, "report", report_workout_key(activity.started_at),
+            ))) is not None:
+                candidate = db.get(Workout, reported.workout_id)
+                if candidate.file_sha256 is None:
+                    workout = candidate
             candidates = []
             if workout is None:
                 workout = Workout(athlete_id=athlete_id, started_at=activity.started_at)

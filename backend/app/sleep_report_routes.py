@@ -1,3 +1,4 @@
+import csv
 import json
 from time import time
 from typing import Annotated
@@ -10,8 +11,13 @@ from starlette.concurrency import run_in_threadpool
 from starlette.requests import ClientDisconnect
 
 from .security import Actor, Auth, DB, authenticate
-from .sleep_models import PrivateSleepReportNight
-from .sleep_report_schemas import MAX_SLEEP_REPORT_BYTES, SleepReport, SleepReportHistory, SleepReportNight, SleepReportResult
+from .athlete_models import AthleteProfile, WellnessEntry
+from .sleep import TIME_FIELDS, new_sleep_day
+from .sleep_models import PrivateSleepReportNight, SleepDay
+from .sleep_routes import update_projection
+from .sleep_report_schemas import (MAX_SLEEP_REPORT_BYTES, ActivityReport, ActivityReportResult, SleepReport,
+                                   SleepReportHistory, SleepReportNight, SleepReportResult, csv_report)
+from .workout_report import store_workout
 
 router = APIRouter(prefix="/athletes/{athlete_id}/sleep-reports", tags=["Личные отчёты о сне"])
 
@@ -30,8 +36,9 @@ def unique_fields(pairs):
     return result
 
 
-async def read_report(request: Request) -> SleepReport:
-    if request.headers.get("content-type", "").split(";", 1)[0].strip().lower() != "application/json":
+async def read_report(request: Request) -> SleepReport | ActivityReport:
+    content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    if content_type not in {"application/json", "text/csv"}:
         raise HTTPException(415, "sleep_report_content_type")
     body = bytearray()
     try:
@@ -39,21 +46,27 @@ async def read_report(request: Request) -> SleepReport:
             if len(body) + len(chunk) > MAX_SLEEP_REPORT_BYTES:
                 raise HTTPException(413, "sleep_report_too_large")
             body.extend(chunk)
-        data = json.loads(body.decode("utf-8"), object_pairs_hook=unique_fields)
-    except (ValueError, RecursionError, ClientDisconnect):
+        data = (csv_report(body.decode("utf-8-sig")) if content_type == "text/csv"
+                else json.loads(body.decode("utf-8"), object_pairs_hook=unique_fields))
+    except (ValueError, RecursionError, ClientDisconnect, csv.Error):
         raise HTTPException(422, "sleep_report_invalid") from None
 
     try:
-        report = SleepReport.model_validate(data)
+        schema = ActivityReport if isinstance(data, dict) and data.get("schema_version") == 2 else SleepReport
+        report = schema.model_validate(data)
     except ValidationError as exc:
         for error in exc.errors(include_input=False, include_context=False, include_url=False):
             location = error["loc"]
             if len(location) > 1 and location[0] == "sleep" and isinstance(location[1], int):
                 raise HTTPException(422, {"code": "sleep_report_night_invalid", "field": str(location[1] + 1)}) from None
+            if len(location) > 1 and location[0] == "workouts" and isinstance(location[1], int):
+                raise HTTPException(422, {"code": "report_workout_invalid", "field": str(location[1] + 1)}) from None
         raise HTTPException(422, "sleep_report_invalid") from None
 
     if len({night.sleep_date for night in report.sleep}) != len(report.sleep):
         raise HTTPException(422, "sleep_report_duplicate_date")
+    if isinstance(report, ActivityReport) and len({item.started_at for item in report.workouts}) != len(report.workouts):
+        raise HTTPException(422, "report_workout_duplicate")
     return report
 
 
@@ -71,18 +84,60 @@ def history(
     )
 
 
-@router.post("/preview", response_model=SleepReport)
+@router.post("/preview", response_model=SleepReport | ActivityReport)
 async def preview(athlete_id: int, request: Request, actor: Actor):
     require_owner(athlete_id, actor.user_id, actor.role)
     return await read_report(request)
 
 
-def store_report(athlete_id: int, request: Request, report: SleepReport) -> SleepReportResult:
+def apply_report_duration(db, profile, day, night, timestamp):
+    duration = night.duration_minutes
+    if day is None and duration is None:
+        return False
+    key = (profile.athlete_id, night.sleep_date)
+    diary = db.get(WellnessEntry, key)
+    if day is None:
+        day = new_sleep_day(profile, night.sleep_date, diary)
+        db.add(day)
+    manual = day.manual_minutes if day.manual_minutes is not None else day.calculated_minutes
+    conflict = duration is not None and manual is not None and duration != manual
+    for prefix, instant in (("start", night.start_at), ("end", night.end_at)):
+        clock = getattr(day, f"{prefix}_time")
+        offset = getattr(day, f"{prefix}_offset_minutes")
+        if instant is not None and clock is not None:
+            conflict |= clock != instant.strftime("%H:%M") or (
+                offset is not None and offset != instant.utcoffset().total_seconds() / 60
+            )
+    if conflict and duration is None:
+        # With only timestamps, keep an independently entered duration.
+        for field in TIME_FIELDS:
+            setattr(day, field, None)
+        day.calculated_minutes = None
+    elif conflict:
+        for field in (*TIME_FIELDS, "manual_minutes", "calculated_minutes"):
+            setattr(day, field, None)
+    selection_changed = duration is not None and (day.selected_source != "automatic" or day.duration_cleared)
+    if not (conflict or selection_changed or day.report_minutes != duration):
+        return False
+    day.report_minutes = duration
+    if duration is not None:
+        day.selected_source = "automatic"
+        day.duration_cleared = False
+    elif day.selected_source == "automatic":
+        day.selected_source = None
+    update_projection(db, day, diary, timestamp)
+    return True
+
+
+def store_report(athlete_id: int, request: Request, report: SleepReport | ActivityReport) -> SleepReportResult:
     with Session(request.app.state.engine) as db:
         db.execute(text("BEGIN IMMEDIATE"))
         # Recheck the session after the upload, before writing any health data.
         auth = authenticate(request, db)
         require_owner(athlete_id, auth.user.id, auth.user.role)
+        profile = db.get(AthleteProfile, athlete_id)
+        if profile is None:
+            raise HTTPException(404, "athlete_missing")
         rows = db.scalars(select(PrivateSleepReportNight).where(
             PrivateSleepReportNight.athlete_id == athlete_id,
             PrivateSleepReportNight.sleep_date.in_([night.sleep_date for night in report.sleep]),
@@ -93,22 +148,33 @@ def store_report(athlete_id: int, request: Request, report: SleepReport) -> Slee
         for night in report.sleep:
             row = by_date.get(night.sleep_date)
             details = night.details()
+            key = (athlete_id, night.sleep_date)
+            day = db.get(SleepDay, key)
+            projection_changed = apply_report_duration(db, profile, day, night, timestamp)
             if row is None:
                 db.add(PrivateSleepReportNight(
-                    athlete_id=athlete_id, sleep_date=night.sleep_date, details=details, imported_at=timestamp,
+                    athlete_id=athlete_id, sleep_date=night.sleep_date, details=details, imported_at=timestamp, team_visible=True,
                 ))
-            elif row.details != details:
+            elif row.details != details or not row.team_visible:
                 row.details = details
                 row.imported_at = timestamp
-            else:
+                row.team_visible = True
+            elif not projection_changed:
                 continue
             saved += 1
+        if isinstance(report, ActivityReport):
+            changed = sum(store_workout(db, request.app.state.workout_import, profile, item) for item in report.workouts)
+            db.commit()
+            return ActivityReportResult(saved=saved, unchanged=len(report.sleep) - saved,
+                                        workouts_saved=changed, workouts_unchanged=len(report.workouts) - changed)
         db.commit()
     return SleepReportResult(saved=saved, unchanged=len(report.sleep) - saved)
 
 
-@router.put("", response_model=SleepReportResult)
-async def save(athlete_id: int, request: Request, actor: Actor):
+@router.put("", response_model=ActivityReportResult | SleepReportResult)
+async def save(athlete_id: int, request: Request, actor: Actor, confirm: str | None = None):
     require_owner(athlete_id, actor.user_id, actor.role)
     report = await read_report(request)
+    if confirm != "share-and-replace":
+        raise HTTPException(422, "report_confirmation_required")
     return await run_in_threadpool(store_report, athlete_id, request, report)

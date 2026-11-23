@@ -1,7 +1,7 @@
 import json
 import sqlite3
 from contextlib import closing
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -13,7 +13,12 @@ from sqlalchemy.orm import Session
 from app.sleep_models import PrivateSleepReportNight
 from app.sleep_report_schemas import MAX_SLEEP_REPORT_BYTES
 from conftest import ORIGIN
+from fit_fixtures import cycling_fit
 from test_athletes import API, sign_in, team, write
+from test_workout_import import upload
+
+
+CONFIRM = "?confirm=share-and-replace"
 
 
 def ok(response):
@@ -32,8 +37,11 @@ def test_documented_report_preview_confirm_and_retry(team, password):
 
     zero = {"sleep_date": "2026-11-21", "duration_minutes": 0}
     report["sleep"].append(zero)
-    assert ok(write(owner, "PUT", path, report, csrf)) == {"saved": 2, "unchanged": 0}
-    assert ok(write(owner, "PUT", path, report, csrf)) == {"saved": 0, "unchanged": 2}
+    assert write(owner, "PUT", path, report, csrf).json()["detail"] == "report_confirmation_required"
+    assert ok(write(owner, "PUT", path + CONFIRM, report, csrf)) == {"saved": 2, "unchanged": 0}
+    diary = ok(owner.get(API + f"/athletes/{athlete_id}/sleep/2026-11-22"))
+    assert (diary["source"], diary["duration_minutes"], diary["has_diary"]) == ("automatic", 450, False)
+    assert ok(write(owner, "PUT", path + CONFIRM, report, csrf)) == {"saved": 0, "unchanged": 2}
     page = ok(owner.get(API + path + "?limit=1"))
     assert page == {"entries": [report["sleep"][0]], "has_more": True}
     response = owner.get(API + path + "?offset=1&limit=1")
@@ -45,7 +53,7 @@ def test_documented_report_preview_confirm_and_retry(team, password):
     spring = {"sleep_date": "2026-03-29", "start_at": "2026-03-28T22:30:00+01:00",
               "end_at": "2026-03-29T07:00:00+02:00", "duration_minutes": 425}
     revised = {"sleep_date": "2026-11-22", "duration_minutes": 440}
-    assert ok(write(owner, "PUT", path, {"schema_version": 1, "sleep": [spring, revised]}, csrf))["saved"] == 2
+    assert ok(write(owner, "PUT", path + CONFIRM, {"schema_version": 1, "sleep": [spring, revised]}, csrf))["saved"] == 2
     with TestClient(owner.app, base_url=ORIGIN) as later:
         sign_in(later, "one@example.com", password)
         entries = ok(later.get(API + path))["entries"]
@@ -56,7 +64,7 @@ def test_documented_report_preview_confirm_and_retry(team, password):
         assert entries[-1]["end_at"] == spring["end_at"]
 
 
-def test_report_is_visible_only_to_its_owner_and_does_not_change_analytics(team):
+def test_confirmed_report_replaces_manual_sleep_and_exposes_measurements_to_coach(team):
     (coach, coach_csrf), (owner, athlete_id, csrf), (other, other_id, other_csrf) = team
     root = f"/athletes/{athlete_id}"
     path = root + "/sleep-reports"
@@ -64,11 +72,21 @@ def test_report_is_visible_only_to_its_owner_and_does_not_change_analytics(team)
     manual_path = root + f"/sleep/{day}"
     analytics_path = f"/training-intelligence/athletes/{athlete_id}/measurements"
     report = {"schema_version": 1, "sleep": [{"sleep_date": day, "duration_minutes": 471, "sleep_score": 99}]}
-    manual = ok(write(owner, "PATCH", manual_path + "/manual", {"version": 0, "duration_minutes": 420}, csrf))
+    with Session(owner.app.state.engine) as db:
+        db.add(PrivateSleepReportNight(athlete_id=athlete_id, sleep_date=date.fromisoformat(day),
+                                      details={"duration_minutes": 471, "sleep_score": 99}, imported_at=1))
+        db.commit()
+    assert "report" not in ok(coach.get(API + manual_path))
+    assert ok(owner.get(API + manual_path))["report"]["sleep_score"] == 99
+    ok(write(owner, "PATCH", manual_path + "/manual", {"version": 0, "duration_minutes": 420, "sleep_quality": 4}, csrf))
     before = ok(coach.get(API + analytics_path))
-    assert ok(write(owner, "PUT", path, report, csrf)) == {"saved": 1, "unchanged": 0}
-    assert ok(coach.get(API + manual_path)) == manual
-    assert ok(coach.get(API + analytics_path)) == before
+    assert ok(write(owner, "PUT", path + CONFIRM, report, csrf)) == {"saved": 1, "unchanged": 0}
+    after = ok(coach.get(API + manual_path))
+    assert after["duration_minutes"] == 471
+    assert after["candidates"] == {"automatic": 471}
+    assert after["report"]["sleep_score"] == 99 and after["sleep_quality"] == 4
+    assert ok(coach.get(API + analytics_path)) != before
+    assert other.get(API + manual_path).status_code == 404
     assert ok(other.get(API + f"/athletes/{other_id}/sleep-reports"))["entries"] == []
 
     with TestClient(owner.app, base_url=ORIGIN) as anonymous:
@@ -78,6 +96,36 @@ def test_report_is_visible_only_to_its_owner_and_does_not_change_analytics(team)
             assert write(viewer, "PUT", path, report, token).status_code == status
     assert write(owner, "PUT", path, report).json()["detail"] == "csrf_invalid"
     assert owner.put(API + path, json=report, headers={"X-CSRF-Token": csrf}).json()["detail"] == "origin_denied"
+
+
+def test_csv_json_and_fit_project_one_activity_and_keep_rpe(team):
+    (coach, _), (owner, athlete_id, csrf), _ = team
+    root = f"/athletes/{athlete_id}"
+    route = API + root + "/sleep-reports"
+    headers = {"Content-Type": "text/csv", "Origin": ORIGIN, "X-CSRF-Token": csrf}
+    start = (datetime.now(UTC) - timedelta(days=2)).replace(hour=12, minute=0, second=0, microsecond=0)
+    file = ("kind,sleep_date,duration_minutes,started_at,timer_seconds,avg_power,tss\n"
+            f"sleep,2026-11-21,440,,,,\nworkout,,,{start.isoformat()},120,175,9\n")
+    assert ok(owner.post(route + "/preview", content=file, headers=headers))["workouts"][0]["tss"] == 9
+    assert ok(owner.put(route + CONFIRM, content=file, headers=headers))["workouts_saved"] == 1
+    assert ok(owner.put(route + CONFIRM, content=file, headers=headers))["workouts_unchanged"] == 1
+    workouts_path = API + root + "/workouts"
+    workouts = ok(owner.get(workouts_path))["workouts"]
+    workout_id = workouts[0]["id"]
+    assert len(workouts) == 1 and workouts[0]["tss"] == 9
+    corrected = file.removesuffix(",9\n") + ",11\n"
+    assert ok(owner.put(route + CONFIRM, content=corrected, headers=headers))["workouts_saved"] == 1
+    measurements = ok(coach.get(API + f"/training-intelligence{root}/measurements"))
+    assert [(workout["workout_id"], workout["tss"]) for workout in measurements["workouts"]] == [(workout_id, 11)]
+    ok(write(owner, "PUT", f"/workouts/{workout_id}/rpe", {"score": 5, "comment": "ride"}, csrf))
+    result = ok(upload(owner, cycling_fit(start=int(start.timestamp()), elapsed=120), csrf))
+    assert (result["workout_id"], result["status"]) == (workout_id, "updated")
+    workouts = ok(owner.get(workouts_path))["workouts"]
+    assert len(workouts) == 1 and workouts[0]["rpe"]["score"] == 5
+    assert ok(owner.get(API + f"/workouts/{workout_id}/samples"))["total"] > 0
+    summary = {"schema_version": 2, "workouts": [{"started_at": start.isoformat(), "timer_seconds": 120, "avg_power": 23}]}
+    assert ok(write(owner, "PUT", root + "/sleep-reports" + CONFIRM, summary, csrf))["workouts_saved"] == 1
+    assert ok(owner.get(workouts_path))["workouts"] == workouts
 
 
 def test_invalid_reports_are_atomic_and_do_not_echo_arbitrary_content(team, caplog):
@@ -127,13 +175,14 @@ def test_private_report_migration_rolls_back_only_uploaded_data(migration):
     command.upgrade(config, "head")
     command.check(config)
     with closing(sqlite3.connect(path)) as db, db:
-        db.execute("INSERT INTO private_sleep_report_nights VALUES (12,'2026-11-22',?,1)", ('{"duration_minutes":470}',))
+        db.execute("INSERT INTO private_sleep_report_nights (athlete_id,sleep_date,details,imported_at) VALUES (12,'2026-11-22',?,1)",
+                   ('{"duration_minutes":470}',))
     command.downgrade(config, "0009_agreed_sleep")
     with closing(sqlite3.connect(path)) as db:
         assert db.execute("SELECT * FROM sleep_days").fetchall() == before
         assert db.execute("SELECT name FROM sqlite_master WHERE name='private_sleep_report_nights'").fetchone() is None
     command.upgrade(config, "head")
     with closing(sqlite3.connect(path)) as db:
-        assert db.execute("SELECT * FROM sleep_days").fetchall() == before
+        assert db.execute("SELECT * FROM sleep_days").fetchall() == [row + (None,) for row in before]
         assert db.execute("SELECT * FROM private_sleep_report_nights").fetchall() == []
         assert db.execute("PRAGMA foreign_key_check").fetchall() == []

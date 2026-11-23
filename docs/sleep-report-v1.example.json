@@ -11,7 +11,8 @@
       "rem_minutes": 85,
       "awake_minutes": 15,
       "sleep_score": 82,
-      "avg_heart_rate_bpm": 49
+      "avg_heart_rate_bpm": 49,
+      "overnight_hrv_ms": 54
     }
   ]
 }

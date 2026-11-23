@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 
@@ -114,7 +116,7 @@ test('тренер читает сон и норму в карточке без 
   await expect(sleep.getByRole('heading', { name: 'Предупреждения восстановления' })).toBeVisible()
   await expect(sleep.getByText('Недостаточность данных', { exact: true })).toBeVisible()
   await expect(sleep.getByRole('button', { name: /Сохранить|Garmin/u })).toHaveCount(0)
-  await expect(page.getByRole('region', { name: 'Импорт отчёта о сне' })).toHaveCount(0)
+  await expect(page.getByRole('region', { name: 'Импорт сна и тренировок' })).toHaveCount(0)
   await page.goto('/diary/sleep')
   await expect(page.getByRole('heading', { name: 'Доступ ограничен' })).toBeVisible()
 })
@@ -122,9 +124,9 @@ test('тренер читает сон и норму в карточке без 
 test('личный отчёт о сне: проверка файла, подтверждение, повтор и история', async ({ page }, info) => {
   await signIn(page, `sleep-${info.project.name}@example.com`)
   await page.getByRole('link', { name: 'Сон и восстановление' }).click()
-  const section = page.getByRole('region', { name: 'Импорт отчёта о сне' })
+  const section = page.getByRole('region', { name: 'Импорт сна и тренировок' })
   const history = section.getByRole('region', { name: 'Загруженные ночи' })
-  const input = section.getByLabel('Отчёт JSON')
+  const input = section.getByLabel('Файл JSON, CSV или FIT')
   const preview = section.getByRole('button', { name: 'Проверить файл' })
   const save = section.getByRole('button', { name: 'Сохранить отчёт' })
   const select = (content: string) => input.setInputFiles({ name: 'report.json', mimeType: 'application/json', buffer: Buffer.from(content) })
@@ -139,7 +141,7 @@ test('личный отчёт о сне: проверка файла, подтв
   await expect(section.getByText('7 ч 53 мин')).toBeVisible()
   await expect(history.getByText('Отчётов пока нет.')).toBeVisible()
 
-  const saveRoute = '**/api/v1/athletes/*/sleep-reports'
+  const saveRoute = /\/api\/v1\/athletes\/\d+\/sleep-reports\?confirm=/u
   await page.route(saveRoute, route => route.abort('failed'))
   await save.click()
   await expect(section.getByRole('alert')).toHaveText('Не удалось связаться с сервером. Повторите попытку.')
@@ -157,4 +159,27 @@ test('личный отчёт о сне: проверка файла, подтв
   await expect(section.getByRole('status')).toHaveText('Ночей сохранено — 0. Без изменений — 1.')
   await expect(history.getByText('7 ч 53 мин')).toHaveCount(1)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  await page.goto('/diary?date=2026-11-22')
+  await expect(page.getByText('Из отчёта за этот день — 7 ч 53 мин.')).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Загрузить отчёт о сне' })).toBeVisible()
+})
+
+test('CSV и FIT обновляют дневник и тренировки из одной формы', async ({ page }, info) => {
+  await signIn(page, `sleep-${info.project.name}@example.com`)
+  await page.getByRole('link', { name: 'Сон и восстановление' }).click()
+  const region = page.getByRole('region', { name: 'Импорт сна и тренировок' })
+  const input = region.getByLabel('Файл JSON, CSV или FIT')
+  const csv = await readFile(resolve('src/activity-report.example.csv'))
+  await input.setInputFiles({ name: 'report.csv', mimeType: 'text/csv', buffer: csv })
+  await region.getByRole('button', { name: 'Проверить файл' }).click()
+  await expect(region.getByRole('list', { name: 'Тренировки из файла' })).toContainText('28 км')
+  await region.getByRole('button', { name: 'Сохранить отчёт' }).click()
+  await expect(region.getByRole('status')).toContainText('Тренировок сохранено — 1')
+  const fit = await readFile(resolve('../backend/tests/fixtures/cycling-power.fit'))
+  await input.setInputFiles({ name: 'ride.fit', mimeType: 'application/octet-stream', buffer: fit })
+  await region.getByRole('button', { name: 'Загрузить FIT' }).click()
+  await region.getByRole('link', { name: 'Открыть тренировку' }).click()
+  await expect(page.getByRole('heading', { name: 'Сводка FIT' })).toBeVisible()
+  await page.getByRole('link', { name: 'Тренировки', exact: true }).click()
+  await expect(page.getByRole('article', { name: /Тренировка от/u }).filter({ hasText: '28 км' })).toHaveCount(1)
 })

@@ -1,0 +1,3 @@
+kind,sleep_date,duration_minutes,overnight_hrv_ms,started_at,timer_seconds,distance_m,avg_power,avg_heart_rate,tss
+sleep,2026-11-22,450,54,,,,,,
+workout,,,,2026-11-21T17:30:00+03:00,3600,28000,165,132,56

@@ -1,13 +1,12 @@
 import { useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
 import { Link, useSearchParams } from 'react-router'
 
 import { dateLabel, diaryFields, recordedAt, useAthleteResource, useSaveAthleteData } from './athleteApi'
 import type { WellnessEntry, WellnessHistory } from './athleteApi'
 import { Pager, QueryFeedback, SaveFeedback } from './AthleteFeedback'
 import { dayLabels } from './trainingApi'
-import { sleepApi, sleepDiaryPath } from './sleepApi'
+import { sleepApi, sleepDiaryPath, sleepDurationLabel } from './sleepApi'
 import type { SleepDay } from './sleepApi'
 
 const pageSize = 30
@@ -38,14 +37,14 @@ function DiaryForm({ path, date, entry, completed, sleep }: {
     event.preventDefault()
     const data = new FormData(event.currentTarget)
     const values = Object.fromEntries(diaryFields.map(field => [field.name, Number(data.get(field.name))]))
-    const sleep = String(data.get('sleep_minutes') ?? '')
+    const duration = String(data.get('sleep_minutes') ?? '')
     const recovery = String(data.get('recovery') ?? '')
     const confirmation = data.get('training_day_status')
     save.mutate({
       path,
       body: {
         ...values, illness_symptoms: data.get('illness_symptoms') === 'yes', comment: String(data.get('comment')).trim() || null,
-        ...(sleep || entry?.sleep_minutes != null ? { sleep_minutes: sleep ? Number(sleep) : null } : {}),
+        ...(duration !== String(entry?.sleep_minutes ?? '') ? { sleep_minutes: duration ? Number(duration) : null } : {}),
         ...(recovery || savedRecovery != null ? { recovery: recovery ? Number(recovery) : null } : {}),
         ...(completed && (confirmation || entry?.training_day_status != null)
           ? { training_day_status: confirmation || null } : {}),
@@ -100,6 +99,8 @@ function DiaryForm({ path, date, entry, completed, sleep }: {
           </select>
         </label>}
       </div>
+      {sleep?.source === 'automatic' && <p>Из отчёта за этот день — {sleepDurationLabel(sleep.duration_minutes)}.</p>}
+      <p className="muted">Дневник можно сохранить без показаний часов. <Link to={`${sleepDiaryPath}?date=${date}#sleep-report-title`}>Загрузить отчёт о сне</Link>.</p>
       <label>Комментарий (необязательно)<textarea name="comment" rows={3} maxLength={2000} defaultValue={entry?.comment ?? ''} /></label>
       {entry && <p className="muted entry-time">Создано {recordedAt(entry.created_at, entry.timezone)} · Изменено {recordedAt(entry.updated_at, entry.timezone)}</p>}
       <div className="actions"><button disabled={save.isPending}>{save.isPending ? 'Сохраняем…' : 'Сохранить дневник'}</button></div>
@@ -111,7 +112,7 @@ function DiaryForm({ path, date, entry, completed, sleep }: {
 function SelectedDay({ athleteId, base, date, localDate }: { athleteId: number; base: string; date: string; localDate: string }) {
   const path = base + '/' + date
   const day = useAthleteResource<WellnessEntry | null>(path)
-  const sleep = useQueryClient().getQueryData<SleepDay>(['athlete-data', `${sleepApi(athleteId)}/${date}`])
+  const { data: sleep } = useAthleteResource<SleepDay>(`${sleepApi(athleteId)}/${date}`)
   return (
     <>
       <QueryFeedback loading={day.isPending} error={day.error} retry={() => void day.refetch()} />

@@ -34,7 +34,7 @@ def resolve_sleep(
     manual: int | None, legacy: int | None, *, automatic: int | None = None,
     selected: SleepSource | None = None, cleared: bool = False,
 ) -> SleepResolution:
-    """Resolve already-authorized candidates. The team path supplies manual and legacy only."""
+    """Prefer manual sleep unless the athlete explicitly selects another source."""
     ordered: dict[SleepSource, int | None] = {"manual": manual, "legacy": legacy, "automatic": automatic}
     candidates = {source: minutes for source, minutes in ordered.items() if minutes is not None}
     source = None if cleared else selected if selected in candidates else next(iter(candidates), None)
@@ -45,7 +45,8 @@ def resolve_sleep_day(day: SleepDay | None, diary: WellnessEntry | None) -> Slee
     if day is None:
         return resolve_sleep(None, diary.sleep_minutes if diary else None)
     manual = day.manual_minutes if day.manual_minutes is not None else day.calculated_minutes
-    return resolve_sleep(manual, day.legacy_minutes, selected=day.selected_source, cleared=day.duration_cleared)
+    return resolve_sleep(manual, day.legacy_minutes, automatic=day.report_minutes,
+                         selected=day.selected_source, cleared=day.duration_cleared)
 
 
 def sleep_ratings(day: SleepDay | None, diary: WellnessEntry | None) -> tuple[int | None, int | None]:
@@ -54,7 +55,8 @@ def sleep_ratings(day: SleepDay | None, diary: WellnessEntry | None) -> tuple[in
     return (day.sleep_quality, day.recovery) if day else (None, None)
 
 
-def sleep_view(profile: AthleteProfile, sleep_date: date, day: SleepDay | None, diary: WellnessEntry | None) -> SleepView:
+def sleep_view(profile: AthleteProfile, sleep_date: date, day: SleepDay | None, diary: WellnessEntry | None,
+               *, has_report: bool = False) -> SleepView:
     resolution = resolve_sleep_day(day, diary)
     quality, recovery = sleep_ratings(day, diary)
     override = day and day.manual_minutes is not None and day.calculated_minutes is not None and (
@@ -71,7 +73,7 @@ def sleep_view(profile: AthleteProfile, sleep_date: date, day: SleepDay | None, 
         end_offset_minutes=day.end_offset_minutes if day else None,
         entered_duration_minutes=day.manual_minutes if day else None,
         calculated_duration_minutes=day.calculated_minutes if day else None,
-        sleep_quality=quality, recovery=recovery, has_diary=diary is not None,
+        sleep_quality=quality, recovery=recovery, has_diary=diary is not None, has_report=has_report,
     )
 
 

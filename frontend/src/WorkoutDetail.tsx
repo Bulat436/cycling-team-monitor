@@ -87,7 +87,7 @@ function WorkoutDetails({ workout, coach }: { workout: WorkoutDetail; coach: boo
   return (
     <>
       <section className="panel">
-        <h2>Сводка FIT</h2>
+        <h2>{calculated?.version === 'report-summary-v1' ? 'Сводка из отчёта' : 'Сводка FIT'}</h2>
         <dl className="measurements">
           {measures.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
         </dl>
@@ -133,7 +133,7 @@ function WorkoutDetails({ workout, coach }: { workout: WorkoutDetail; coach: boo
         <h2>Исходные данные</h2>
         <p>Точек временного ряда — {summary.sample_count}.</p>
         {!!result?.quality.missing_channels.length && <p className="muted">Каналы без показаний — {result.quality.missing_channels.map(key => channelNames[key] ?? key).join(', ')}.</p>}
-        <p>Источники — {[...new Set(workout.sources.map(row => row.source === 'manual' ? 'ручная загрузка' : row.source === 'onelapfit' ? 'OnelapFit' : row.source))].join(', ')}.</p>
+        <p>Источники — {[...new Set(workout.sources.map(row => ({ manual: 'ручная загрузка', onelapfit: 'OnelapFit', report: 'отчёт JSON / CSV' })[row.source] ?? row.source))].join(', ')}.</p>
         {workout.original_available && <div className="actions"><a className="button secondary" href={'/api/v1/workouts/' + workout.id + '/fit'}>Скачать исходный FIT</a></div>}
         {coach && workout.original_available && <ReprocessForm workoutId={workout.id} />}
       </section>}

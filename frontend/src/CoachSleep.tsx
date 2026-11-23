@@ -4,6 +4,8 @@ import { Link } from 'react-router'
 import { QueryFeedback } from './AthleteFeedback'
 import { dateLabel, useAthleteResource } from './athleteApi'
 import { SleepSummary } from './SleepSummary'
+import { SleepReportMeasurements } from './SleepReports'
+import type { SleepReportNight } from './SleepReports'
 import { isCalendarDate, sleepApi } from './sleepApi'
 import type { SleepDay } from './sleepApi'
 import { AttentionBadge } from './TrainingSummary'
@@ -13,7 +15,7 @@ import type { AthleteWarnings, Measurements } from './trainingApi'
 export default function CoachSleep({ athleteId, today }: { athleteId: number; today: string }) {
   const [chosen, setChosen] = useState('')
   const date = chosen || today
-  const day = useAthleteResource<SleepDay>(`${sleepApi(athleteId)}/${date}`, 60_000)
+  const day = useAthleteResource<SleepDay & { report?: SleepReportNight }>(`${sleepApi(athleteId)}/${date}`, 60_000)
   const base = athleteTrainingApi(athleteId)
   const measures = useAthleteResource<Measurements>(base + '/measurements?period=28')
   const warnings = useAthleteResource<AthleteWarnings>(base + '/warnings', 60_000)
@@ -32,6 +34,10 @@ export default function CoachSleep({ athleteId, today }: { athleteId: number; to
       <p className="muted">{dateLabel(day.data.date)} · {day.data.timezone}</p>
       <SleepSummary day={day.data} comparison={measures.data?.recovery?.find(item => item.date === date)?.metrics.sleep_minutes}
         windowDays={measures.data?.rules?.recovery_window_days} />
+      {day.data.report && <>
+        <h3>Измерения сна из отчёта</h3>
+        <SleepReportMeasurements night={day.data.report} />
+      </>}
     </>}
     <QueryFeedback loading={measures.isPending} error={measures.error} retry={() => void measures.refetch()} />
     <h3>Предупреждения восстановления</h3>

@@ -1,8 +1,9 @@
-export type SleepSource = 'manual' | 'legacy'
+export type SleepSource = 'manual' | 'legacy' | 'automatic'
 
 export const sleepSources: Record<SleepSource, string> = {
   manual: 'Введено вручную',
   legacy: 'Историческая запись',
+  automatic: 'Загруженный отчёт',
 }
 
 export interface SleepDay {
@@ -25,6 +26,7 @@ export interface SleepDay {
   sleep_quality: number | null
   recovery: number | null
   has_diary: boolean
+  has_report?: boolean
 }
 
 export interface SleepHistory {
@@ -56,6 +58,6 @@ export function sleepDurationLabel(minutes: number | null) {
 }
 
 export function sleepRecordLabel(day: SleepDay) {
-  return day.duration_minutes == null && !hasManualSleep(day) && !Object.keys(day.candidates).length
+  return day.duration_minutes == null && !day.has_report && !hasManualSleep(day) && !Object.keys(day.candidates).length
     ? 'Записи сна нет' : sleepDurationLabel(day.duration_minutes)
 }

@@ -14,7 +14,8 @@ class SleepDay(Base):
         CheckConstraint("calculated_minutes BETWEEN 0 AND 1440", name="ck_sleep_calculated_minutes"),
         CheckConstraint("sleep_quality BETWEEN 1 AND 5", name="ck_sleep_quality"),
         CheckConstraint("recovery BETWEEN 1 AND 5", name="ck_sleep_recovery"),
-        CheckConstraint("selected_source IN ('manual', 'legacy')", name="ck_sleep_selected_source"),
+        CheckConstraint("selected_source IN ('manual', 'legacy', 'automatic')", name="ck_sleep_selected_source"),
+        CheckConstraint("report_minutes BETWEEN 0 AND 1440", name="ck_sleep_report_minutes"),
         CheckConstraint("version > 0", name="ck_sleep_version"),
     )
 
@@ -24,13 +25,14 @@ class SleepDay(Base):
     legacy_minutes: Mapped[int | None]
     manual_minutes: Mapped[int | None]
     calculated_minutes: Mapped[int | None]
+    report_minutes: Mapped[int | None]
     start_time: Mapped[str | None] = mapped_column(String(5))
     end_time: Mapped[str | None] = mapped_column(String(5))
     start_offset_minutes: Mapped[int | None]
     end_offset_minutes: Mapped[int | None]
     sleep_quality: Mapped[int | None]
     recovery: Mapped[int | None]
-    selected_source: Mapped[str | None] = mapped_column(String(8))
+    selected_source: Mapped[str | None] = mapped_column(String(9))
     duration_cleared: Mapped[bool] = mapped_column(default=False, server_default=false())
     version: Mapped[int]
     updated_at: Mapped[float]
@@ -43,3 +45,4 @@ class PrivateSleepReportNight(Base):
     sleep_date: Mapped[date] = mapped_column(primary_key=True)
     details: Mapped[dict] = mapped_column(JSON)
     imported_at: Mapped[float]
+    team_visible: Mapped[bool] = mapped_column(default=False, server_default=false())

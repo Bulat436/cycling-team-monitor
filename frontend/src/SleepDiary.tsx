@@ -4,7 +4,8 @@ import { Link, useBlocker, useOutletContext, useSearchParams } from 'react-route
 import { Pager, QueryFeedback } from './AthleteFeedback'
 import { dateLabel, useAthleteResource } from './athleteApi'
 import { SleepEditor } from './SleepEditor'
-import { SleepReports } from './SleepReports'
+import { SleepReportMeasurements, SleepReports } from './SleepReports'
+import type { SleepReportNight } from './SleepReports'
 import { isCalendarDate, sleepApi, sleepRecordLabel, sleepSources } from './sleepApi'
 import type { SleepDay, SleepHistory } from './sleepApi'
 import { DatedChart } from './TrainingGraphs'
@@ -136,10 +137,16 @@ function SleepDaySection({ base, date, today, measures, onDirty, onMoved }: {
   base: string; date: string; today: string; measures?: OwnRecovery
   onDirty: (value: boolean) => void; onMoved: (date: string) => void
 }) {
-  const query = useAthleteResource<SleepDay>(`${base}/${date}`)
+  const query = useAthleteResource<SleepDay & { report?: SleepReportNight }>(`${base}/${date}`)
   const refresh = () => { void query.refetch() }
   if (!query.data) return <QueryFeedback loading={query.isPending} error={query.error} retry={refresh} />
-  return <SleepEditor day={query.data} base={base} today={today} refresh={refresh} refreshError={query.error}
+  return <>
+    <SleepEditor day={query.data} base={base} today={today} refresh={refresh} refreshError={query.error}
     comparison={measures?.recovery.find(day => day.date === date)?.metrics.sleep_minutes} windowDays={measures?.recovery_window_days}
-    onDirty={onDirty} onMoved={onMoved} />
+      onDirty={onDirty} onMoved={onMoved} />
+    {query.data.report && <section className="panel" aria-label="Измерения сна из отчёта">
+      <h2>Измерения сна из отчёта</h2>
+      <SleepReportMeasurements night={query.data.report} />
+    </section>}
+  </>
 }

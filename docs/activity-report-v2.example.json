@@ -1,0 +1,20 @@
+{
+  "schema_version": 2,
+  "sleep": [
+    {
+      "sleep_date": "2026-11-22",
+      "duration_minutes": 450,
+      "overnight_hrv_ms": 54
+    }
+  ],
+  "workouts": [
+    {
+      "started_at": "2026-11-21T17:30:00+03:00",
+      "timer_seconds": 3600,
+      "distance_m": 28000,
+      "avg_power": 165,
+      "avg_heart_rate": 132,
+      "tss": 56
+    }
+  ]
+}
